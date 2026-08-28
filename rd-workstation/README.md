@@ -1,32 +1,21 @@
-# React + TypeScript + Vite
+# rd-workstation
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+RD Workstation 2.0 —— 弱电/智能建筑设计师的「设计 → 推导 → 清单 → 预算」一站式工作台（Web 先行版）。
 
-Currently, two official plugins are available:
+## 技术栈
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+React 19 · TypeScript · Vite 8 · Tailwind v4 · Zustand · React Router 7 · ECharts 6 · SheetJS
 
-## React Compiler
+## 运行
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm install
+npm run dev     # http://localhost:5173
+npm run build   # tsc -b && vite build
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+## 结构
+
+- `src/domain`：Types（冻结 Schema 43 表）/ Repository(useDB) / Engines（推导·选型·清单·预算·校核）/ Services
+- `src/pages`：今日工作台 / 项目 / 设计 / 设备中心 / 清单 / 系统设计工作区
+- 数据层为内存 Store + localStorage，接 Tauri + SQLite 时仅替换 Repository 实现
