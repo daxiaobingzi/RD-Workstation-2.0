@@ -1,4 +1,4 @@
-import { useDB } from '../db/memory-db'
+import { repository } from '../db/memory-db'
 import { T } from '../types/domain'
 import type { BillItem, Budget, BudgetItem, Product, ProductModel, ProductFamily } from '../types/domain'
 import { BudgetEngine, SelectionEngine } from '../engines'
@@ -9,24 +9,24 @@ import { DesignService } from './design.service'
 export const BudgetService = {
   generate(psId: string, projectId: string, billVersionId: string) {
     const { budget, items } = BudgetEngine.generate(ctx, psId, projectId, billVersionId)
-    useDB.getState().insert(T.budgets, budget)
-    useDB.getState().insertMany(T.budget_items, items)
+    repository.insert(T.budgets, budget)
+    repository.insertMany(T.budget_items, items)
     return { budget, items }
   },
   /** 设定目标预算，用于超支预警 */
   setTargetAmount(budgetId: string, amount: number) {
-    useDB.getState().update(T.budgets, budgetId, { target_amount: amount })
+    repository.update(T.budgets, budgetId, { target_amount: amount })
   },
   byProject(projectId: string): Budget[] {
-    return useDB.getState().where<Budget>(T.budgets, (r) => r.project_id === projectId)
+    return repository.where<Budget>(T.budgets, (r) => r.project_id === projectId)
   },
   items(budgetId: string): BudgetItem[] {
-    return useDB.getState().where<BudgetItem>(T.budget_items, (r) => r.budget_id === budgetId)
+    return repository.where<BudgetItem>(T.budget_items, (r) => r.budget_id === budgetId)
   },
   /** 预算构成：按产品族聚合金额（供堆叠条形图） */
   byFamily(budgetId: string): { name: string; amount: number }[] {
     const items = this.items(budgetId)
-    const db = useDB.getState().db
+    const db = repository.db
     const familyOfModel = new Map<string, string>()
     for (const m of db[T.product_models]) {
       const prod = db[T.products].find((p) => p.id === (m as ProductModel).product_id) as Product | undefined

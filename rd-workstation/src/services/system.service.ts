@@ -1,4 +1,4 @@
-import { useDB } from '../db/memory-db'
+import { repository } from '../db/memory-db'
 import { T } from '../types/domain'
 import type { DesignParameter, StandardSystem } from '../types/domain'
 import { uid } from '../lib/utils'
@@ -6,18 +6,18 @@ import { uid } from '../lib/utils'
 /* ---------- 系统 / 设计参数 ---------- */
 export const SystemService = {
   listStandard(): StandardSystem[] {
-    return useDB.getState().getTable<StandardSystem>(T.systems).filter((s) => s.enabled !== false)
+    return repository.getTable<StandardSystem>(T.systems).filter((s) => s.enabled !== false)
   },
   params(psId: string): DesignParameter[] {
-    return useDB.getState().where<DesignParameter>(T.design_parameters, (r) => r.project_system_id === psId)
+    return repository.where<DesignParameter>(T.design_parameters, (r) => r.project_system_id === psId)
   },
   setParam(psId: string, key: string, name: string, value: number | string | boolean, unit?: string) {
-    const existing = useDB.getState().where<DesignParameter>(T.design_parameters, (r) => r.project_system_id === psId && r.parameter_key === key)
+    const existing = repository.where<DesignParameter>(T.design_parameters, (r) => r.project_system_id === psId && r.parameter_key === key)
     const valueType = typeof value === 'number' ? 'number' : typeof value === 'boolean' ? 'boolean' : 'string'
     if (existing.length) {
-      useDB.getState().update(T.design_parameters, existing[0].id, { value_json: value, value_type: valueType, unit })
+      repository.update(T.design_parameters, existing[0].id, { value_json: value, value_type: valueType, unit })
     } else {
-      useDB.getState().insert(T.design_parameters, {
+      repository.insert(T.design_parameters, {
         id: uid('dp'), project_system_id: psId, parameter_key: key, parameter_name: name,
         value_type: valueType, value_json: value, unit, required: true,
       } as unknown as DesignParameter)

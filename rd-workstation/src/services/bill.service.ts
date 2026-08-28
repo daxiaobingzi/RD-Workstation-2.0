@@ -1,4 +1,4 @@
-import { useDB } from '../db/memory-db'
+import { repository } from '../db/memory-db'
 import { T } from '../types/domain'
 import type { BillItem, BillVersion } from '../types/domain'
 import { BillEngine } from '../engines'
@@ -8,26 +8,25 @@ import ctx from './ctx'
 export const BillService = {
   generate(psId: string, projectId: string) {
     const { version, items } = BillEngine.generate(ctx, psId, projectId)
-    useDB.getState().insert(T.bill_versions, version)
-    useDB.getState().insertMany(T.bill_items, items)
+    repository.insert(T.bill_versions, version)
+    repository.insertMany(T.bill_items, items)
     return { version, items }
   },
   versions(projectId: string): BillVersion[] {
-    return useDB
-      .getState()
+    return repository
       .where<BillVersion>(T.bill_versions, (r) => r.project_id === projectId)
       .sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''))
   },
   items(billVersionId: string): BillItem[] {
-    return useDB.getState().where<BillItem>(T.bill_items, (r) => r.bill_version_id === billVersionId)
+    return repository.where<BillItem>(T.bill_items, (r) => r.bill_version_id === billVersionId)
   },
   /** 手工调整清单项（数量 / 单价等），自动重算金额 */
   updateItem(id: string, patch: Pick<BillItem, 'quantity' | 'unit_price'>) {
-    const it = useDB.getState().getById<BillItem>(T.bill_items, id)
+    const it = repository.getById<BillItem>(T.bill_items, id)
     if (!it) return
     const quantity = patch.quantity ?? it.quantity
     const unitPrice = patch.unit_price ?? it.unit_price
-    useDB.getState().update(T.bill_items, id, { quantity, unit_price: unitPrice, amount: quantity * unitPrice })
+    repository.update(T.bill_items, id, { quantity, unit_price: unitPrice, amount: quantity * unitPrice })
   },
   /** 按类别汇总（供分类小计） */
   summary(billVersionId: string): { category: string; count: number; quantity: number; amount: number }[] {
@@ -57,8 +56,8 @@ export const BillService = {
     return '\uFEFF' + [head.join(','), ...lines].join('\n')
   },
   remove(versionId: string) {
-    useDB.getState().remove(T.bill_versions, versionId)
-    useDB.getState().removeMany(T.bill_items, (r) => (r as BillItem).bill_version_id === versionId)
+    repository.remove(T.bill_versions, versionId)
+    repository.removeMany(T.bill_items, (r) => (r as BillItem).bill_version_id === versionId)
   },
   /** 版本对比：added / removed / changed（按 item_code 匹配） */
   compareVersions(v1Id: string, v2Id: string) {

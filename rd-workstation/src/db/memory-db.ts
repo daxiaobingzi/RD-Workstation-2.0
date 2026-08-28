@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { Row } from '../types/domain'
+import type { Repository } from '../repositories/repository'
 
 /** 数据库表集合：{ 表名: 行[] }。Web 先行阶段以内存对象承载，localStorage 持久化；
  *  后续 SQLite/Drizzle 落地时，把本层替换为 Repository 实现即可，上层不变。 */
@@ -112,3 +113,18 @@ export const useDB = create<DBState>((set, get) => ({
     set({ db: {}, ready: false })
   },
 }))
+
+export class MemoryRepository implements Repository {
+  get db(): DB { return useDB.getState().db }
+  getTable<T>(t: string): T[] { return useDB.getState().getTable<T>(t) }
+  getById<T>(t: string, id: string): T | undefined { return useDB.getState().getById<T>(t, id) }
+  where<T>(t: string, pred: (row: T) => boolean): T[] { return useDB.getState().where<T>(t, pred) }
+  insert<T extends Row>(t: string, row: T): void { useDB.getState().insert(t, row) }
+  insertMany<T extends Row>(t: string, rows: T[]): void { useDB.getState().insertMany(t, rows) }
+  update(t: string, id: string, patch: Record<string, unknown>): void { useDB.getState().update(t, id, patch) }
+  remove(t: string, id: string): void { useDB.getState().remove(t, id) }
+  removeMany(t: string, pred: (row: Row) => boolean): void { useDB.getState().removeMany(t, pred) }
+  replace<T extends Row>(t: string, rows: T[]): void { useDB.getState().replace(t, rows) }
+}
+/** 组合根单例：Service 经它访问数据，类型为 Repository 接口 */
+export const repository: Repository = new MemoryRepository()

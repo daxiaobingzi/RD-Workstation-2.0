@@ -1,4 +1,4 @@
-import { useDB } from '../db/memory-db'
+import { repository } from '../db/memory-db'
 import { T } from '../types/domain'
 import type {
   ModelGradeBinding, Grade, ProductModel, Product, ProductFamily,
@@ -20,36 +20,36 @@ export const DeviceGrade = {
   ...gradeDeps,
   /* ---------- 档次绑定（model_grade_bindings，选型引擎优先读取） ---------- */
   gradeBindings(modelId: string): ModelGradeBinding[] {
-    return useDB.getState().where<ModelGradeBinding>(T.model_grade_bindings, (r) => r.model_id === modelId)
+    return repository.where<ModelGradeBinding>(T.model_grade_bindings, (r) => r.model_id === modelId)
   },
   /** 型号挂 / 摘某个档次（code → grade_id） */
   setGradeBinding(modelId: string, gradeCode: string, on: boolean) {
     const gradeId = SelectionEngine.gradeIdByCode(ctx, gradeCode)
     if (!gradeId) return
-    const existing = useDB.getState().getTable<ModelGradeBinding>(T.model_grade_bindings).find((b) => b.model_id === modelId && b.grade_id === gradeId)
+    const existing = repository.getTable<ModelGradeBinding>(T.model_grade_bindings).find((b) => b.model_id === modelId && b.grade_id === gradeId)
     if (on && !existing) {
-      useDB.getState().insert(T.model_grade_bindings, { id: uid('mgb'), model_id: modelId, grade_id: gradeId, is_default: true } as unknown as ModelGradeBinding)
+      repository.insert(T.model_grade_bindings, { id: uid('mgb'), model_id: modelId, grade_id: gradeId, is_default: true } as unknown as ModelGradeBinding)
     } else if (!on && existing) {
-      useDB.getState().remove(T.model_grade_bindings, existing.id)
+      repository.remove(T.model_grade_bindings, existing.id)
     }
   },
   /** 型号主档（表单下拉）写入：覆盖旧绑定，仅保留所选档，并镜像 grade_code —— 保证绑定表与 grade_code 同步 */
   setModelDefaultGrade(modelId: string, gradeCode?: string) {
-    useDB.getState().getTable<ModelGradeBinding>(T.model_grade_bindings)
+    repository.getTable<ModelGradeBinding>(T.model_grade_bindings)
       .filter((b) => b.model_id === modelId)
-      .forEach((b) => useDB.getState().remove(T.model_grade_bindings, b.id))
-    useDB.getState().update(T.product_models, modelId, { grade_code: gradeCode })
+      .forEach((b) => repository.remove(T.model_grade_bindings, b.id))
+    repository.update(T.product_models, modelId, { grade_code: gradeCode })
     if (gradeCode) this.setGradeBinding(modelId, gradeCode, true)
   },
   /** 型号档位（展示/筛选口径）：绑定表优先，其次 grade_code —— 与选型引擎一致 */
   gradeCodeOf(modelId: string): string | undefined {
     const gradeId = this.gradeBindings(modelId)[0]?.grade_id
-    if (gradeId) return useDB.getState().getTable<Grade>(T.grades).find((g) => g.id === gradeId)?.code
-    return useDB.getState().getById<ProductModel>(T.product_models, modelId)?.grade_code
+    if (gradeId) return repository.getTable<Grade>(T.grades).find((g) => g.id === gradeId)?.code
+    return repository.getById<ProductModel>(T.product_models, modelId)?.grade_code
   },
   /** 某产品族各档可用型号数（含绑定 + grade_code 兜底，供缺档上下文展示） */
   familyGradeCoverage(familyId: string): { grade: string; label: string; count: number }[] {
-    const db = useDB.getState().db
+    const db = repository.db
     const famModels = new Set((db[T.products] ?? []).filter((p) => (p as Product).product_family_id === familyId).map((p) => p.id))
     const models = (db[T.product_models] ?? []).filter((m) => famModels.has((m as ProductModel).product_id) && (m as ProductModel).status !== 'disabled') as ProductModel[]
     const bound = new Set(this.gradeBindingsOfModels(models.map((m) => m.id)))
@@ -61,14 +61,14 @@ export const DeviceGrade = {
   },
   gradeBindingsOfModels(modelIds: string[]): Set<string> {
     const boundIds = new Set<string>()
-    const all = useDB.getState().getTable<ModelGradeBinding>(T.model_grade_bindings)
+    const all = repository.getTable<ModelGradeBinding>(T.model_grade_bindings)
     modelIds.forEach((mid) => { if (all.some((b) => b.model_id === mid)) boundIds.add(mid) })
     return boundIds
   },
 
   /** 缺价 / 缺档 / 停用被引用的预警统计（缺档口径与选型引擎一致：绑定优先、其次 grade_code、族内无型号不计） */
   stats(): { missingPrice: number; missingGrade: { familyId: string; familyName: string; grade: string; gradeLabel: string }[]; disabledInUse: number } {
-    const db = useDB.getState().db
+    const db = repository.db
     const models = db[T.product_models] as ProductModel[]
     const active = models.filter((m) => m.status !== 'disabled')
     const missingPrice = active.filter((m) => this.price(m.id) <= 0).length
@@ -91,7 +91,7 @@ export const DeviceGrade = {
   /* ---------- R3：批量操作 ---------- */
   /** 批量停用 / 启用 */
   batchSetStatus(modelIds: string[], status: 'active' | 'disabled') {
-    const { update } = useDB.getState()
+    const { update } = repository
     modelIds.forEach((id) => update(T.product_models, id, { status }))
   },
   /** 批量调整参考价：percent 为百分比增幅（-50 ~ 200），按当前参考价计算；无价型号跳过并计数 */
@@ -118,7 +118,7 @@ export const DeviceGrade = {
   },
   /** 价格影响分析：按最新参考价 vs 项目选型快照，汇总各系统差额（不写库） */
   priceImpact(): { psId: string; systemName: string; projectName: string; oldTotal: number; newTotal: number; diff: number }[] {
-    const db = useDB.getState().db
+    const db = repository.db
     const psName = new Map<string, { system: string; project: string }>()
     const sysName = new Map((db[T.systems] ?? []).map((s) => [s.id, (s as StandardSystem).name]))
     const projName = new Map((db[T.projects] ?? []).map((p) => [p.id, (p as Project).name]))

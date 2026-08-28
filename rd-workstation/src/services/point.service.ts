@@ -1,4 +1,4 @@
-import { useDB } from '../db/memory-db'
+import { repository } from '../db/memory-db'
 import { T } from '../types/domain'
 import type { Point, PointCategory } from '../types/domain'
 import { uid } from '../lib/utils'
@@ -106,13 +106,13 @@ export function parsePointRows(rows: (string | number)[][], categories: PointCat
 
 export const PointService = {
   list(psId: string): Point[] {
-    return useDB.getState().getTable<Point>(T.points).filter((p) => p.project_system_id === psId)
+    return repository.getTable<Point>(T.points).filter((p) => p.project_system_id === psId)
   },
   categories(systemId: string): PointCategory[] {
-    return useDB.getState().where<PointCategory>(T.point_categories, (r) => r.system_id === systemId && r.enabled !== false)
+    return repository.where<PointCategory>(T.point_categories, (r) => r.system_id === systemId && r.enabled !== false)
   },
   add(psId: string, data: Partial<Point>): Point {
-    const pts = useDB.getState().getTable<Point>(T.points).filter((p) => p.project_system_id === psId)
+    const pts = repository.getTable<Point>(T.points).filter((p) => p.project_system_id === psId)
     const p: Point = {
       id: uid('pt'),
       project_system_id: psId,
@@ -131,21 +131,21 @@ export const PointService = {
       created_at: nowIso(),
       updated_at: nowIso(),
     }
-    useDB.getState().insert(T.points, p)
+    repository.insert(T.points, p)
     return p
   },
   update(id: string, patch: Partial<Point>) {
-    useDB.getState().update(T.points, id, { ...patch, updated_at: nowIso() })
+    repository.update(T.points, id, { ...patch, updated_at: nowIso() })
   },
   remove(id: string) {
-    useDB.getState().remove(T.points, id)
+    repository.remove(T.points, id)
   },
   removeMany(ids: string[]) {
-    useDB.getState().removeMany(T.points, (r) => ids.includes(r.id))
+    repository.removeMany(T.points, (r) => ids.includes(r.id))
   },
   /** 批量导入点位（CSV/Excel 解析后的行） */
   addMany(psId: string, rows: ImportPointRow[]): Point[] {
-    const pts = useDB.getState().getTable<Point>(T.points).filter((p) => p.project_system_id === psId)
+    const pts = repository.getTable<Point>(T.points).filter((p) => p.project_system_id === psId)
     const created = rows.map((r, i) => {
       const p: Point = {
         id: uid('pt'),
@@ -167,7 +167,7 @@ export const PointService = {
       }
       return p
     })
-    useDB.getState().insertMany(T.points, created)
+    repository.insertMany(T.points, created)
     return created
   },
 
@@ -176,7 +176,7 @@ export const PointService = {
     return ['点位名称,类别,楼层,位置,数量,备注', '大厅高清枪机,室内摄像机,1F,大堂,12,标准档', '走廊半球,室内摄像机,2F,走廊,8,'].join('\n')
   },
   updateMany(updates: { id: string; patch: Partial<Point> }[]) {
-    const { update } = useDB.getState()
+    const { update } = repository
     updates.forEach(({ id, patch }) => update(T.points, id, { ...patch, updated_at: nowIso() }))
   },
 }
