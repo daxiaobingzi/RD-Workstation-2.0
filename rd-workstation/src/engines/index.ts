@@ -5,8 +5,8 @@
 import type {
   BillItem, BillVersion, Budget, BudgetItem, DesignResult, DeviceSelection,
   Point, ProductModel, Task,
-} from './types'
-import { T } from './types'
+} from '../types/domain'
+import { T } from '../types/domain'
 import { uid } from '../lib/utils'
 
 export type EngineCtx = {

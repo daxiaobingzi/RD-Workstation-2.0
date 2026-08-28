@@ -1,14 +1,14 @@
 import { useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { ClipboardPaste, FileSpreadsheet, Download, UploadCloud, CheckCircle2, AlertTriangle } from 'lucide-react'
-import { DeviceService } from '../domain/services'
-import type { ProductFamily, Brand } from '../domain/types'
-import { Modal } from './ui/dialog'
-import { Button } from './ui/button'
-import { Textarea, Field } from './ui/field'
-import { Segmented } from './ui/segmented'
-import { Table, THead, TBody, TR, TH, TD } from './ui/table'
-import { toast } from './ui/toast'
+import { DeviceService } from '../../../services'
+import type { ProductFamily, Brand } from '../../../types/domain'
+import { Modal } from '../../../components/ui/dialog'
+import { Button } from '../../../components/ui/button'
+import { Textarea, Field } from '../../../components/ui/field'
+import { Segmented } from '../../../components/ui/segmented'
+import { Table, THead, TBody, TR, TH, TD } from '../../../components/ui/table'
+import { toast } from '../../../components/ui/toast'
 
 interface ImportRow {
   familyId?: string

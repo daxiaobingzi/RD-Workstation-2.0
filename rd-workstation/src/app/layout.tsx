@@ -4,7 +4,7 @@ import {
   Target, Repeat, Sparkles, Search, Settings, Command, ChevronRight,
 } from 'lucide-react'
 import { cn } from '../lib/utils'
-import { ProjectService } from '../domain/services'
+import { ProjectService } from '../services'
 
 const NAV = [
   { to: '/today', label: '今日', icon: Sun },

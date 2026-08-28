@@ -1,8 +1,8 @@
 import { BarChart3, PieChart, Flame } from 'lucide-react'
-import { useDB } from '../domain/db'
-import { T } from '../domain/types'
-import { DeviceService } from '../domain/services'
-import { fmtMoney, fmtNum, cn } from '../lib/utils'
+import { useDB } from '../../../db/memory-db'
+import { T } from '../../../types/domain'
+import { DeviceService } from '../../../services'
+import { fmtMoney, fmtNum, cn } from '../../../lib/utils'
 
 const BUCKETS = [
   { label: '< ¥500', min: 0, max: 500 },

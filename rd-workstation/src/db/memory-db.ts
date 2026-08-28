@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Row } from './types'
+import type { Row } from '../types/domain'
 
 /** 数据库表集合：{ 表名: 行[] }。Web 先行阶段以内存对象承载，localStorage 持久化；
  *  后续 SQLite/Drizzle 落地时，把本层替换为 Repository 实现即可，上层不变。 */

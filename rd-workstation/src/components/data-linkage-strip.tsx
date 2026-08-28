@@ -1,5 +1,5 @@
 import { ArrowRight } from 'lucide-react'
-import { PointService, DesignService, BillService } from '../domain/services'
+import { PointService, DesignService, BillService } from '../services'
 import { fmtMoney, fmtNum } from '../lib/utils'
 
 export function DataLinkageStrip({ psId }: { psId: string }) {

@@ -1,5 +1,5 @@
-import type { DB } from './db'
-import type { Row } from './types'
+import type { DB } from '../db/memory-db'
+import type { Row } from '../types/domain'
 
 let n = 0
 const id = (p: string) => `${p}_${(++n).toString(36)}`

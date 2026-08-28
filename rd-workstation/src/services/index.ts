@@ -2,14 +2,14 @@
  * RD Workstation 2.0 · Domain Services（业务编排层）
  * React 禁止直改库，所有变更经 Service → Repository(useDB)；派生计算经 Engine。
  */
-import { useDB } from './db'
-import { T } from './types'
+import { useDB } from '../db/memory-db'
+import { T } from '../types/domain'
 import type {
   BillItem, BillVersion, Brand, Budget, BudgetItem, DeviceCategory, DeviceSelection,
   DesignParameter, DesignResult, Grade, ModelBrand, ModelGradeBinding, Point, PointCategory, Price, Product,
   ProductFamily, ProductModel, Project, ProjectSystem, Schedule, StandardSystem, Supplier, Task, KnowledgeItem,
-} from './types'
-import { DesignEngine, BillEngine, BudgetEngine, SelectionEngine, ValidationEngine, type EngineCtx } from './engines'
+} from '../types/domain'
+import { DesignEngine, BillEngine, BudgetEngine, SelectionEngine, ValidationEngine, type EngineCtx } from '../engines'
 import { uid, todayISO } from '../lib/utils'
 
 const ctx: EngineCtx = {

@@ -3,12 +3,12 @@ import { useNavigate } from 'react-router-dom'
 import {
   Target, ListTodo, CalendarClock, TrendingUp, CheckCircle2, Sparkles, ArrowRight, Repeat,
 } from 'lucide-react'
-import { useDB } from '../domain/db'
-import { T } from '../domain/types'
-import { TaskService, ScheduleService, DesignService, ProjectService } from '../domain/services'
-import { StatusBadge } from '../components/ui/badge'
-import { Progress } from '../components/ui/progress'
-import { cn } from '../lib/utils'
+import { useDB } from '../../db/memory-db'
+import { T } from '../../types/domain'
+import { TaskService, ScheduleService, DesignService, ProjectService } from '../../services'
+import { StatusBadge } from '../../components/ui/badge'
+import { Progress } from '../../components/ui/progress'
+import { cn } from '../../lib/utils'
 
 const PRIORITY_DOT: Record<string, string> = {
   high: 'bg-danger',
