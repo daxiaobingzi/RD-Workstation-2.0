@@ -17,10 +17,8 @@ const pts: { name: string; cat: string; floor: string; space: string; qty: numbe
   { name: '车道枪机', cat: 'pc_ent', floor: '室外', space: '车道出入口', qty: 35, type: 'm_bullet_s' },
 ]
 
-// 点击位行：保留原 index.ts 的 map 逻辑（含 pi 计数、id/point_code 填充）
-let pi = 0
+// 点位行：id / point_code 递增编号由 map 索引生成
 const points = pts.map((p, i) => {
-  pi++
   return {
     id: `pt_vss_${String(i + 1).padStart(3, '0')}`,
     project_system_id: 'ps_vss_001',
