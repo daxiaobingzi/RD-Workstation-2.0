@@ -220,7 +220,9 @@ export function seedDB(): DB {
     { name: '消控值班室半球', cat: 'pc_in', floor: '1F', space: '消控室', qty: 5, type: 'm_dome_s' },
     { name: '车道枪机', cat: 'pc_ent', floor: '室外', space: '车道出入口', qty: 35, type: 'm_bullet_s' },
   ]
+  let pi = 0
   put('points', pts.map((p, i) => {
+    pi++
     return {
       id: `pt_vss_${String(i + 1).padStart(3, '0')}`,
       project_system_id: 'ps_vss_001',
