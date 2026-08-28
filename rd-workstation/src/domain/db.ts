@@ -1,0 +1,114 @@
+import { create } from 'zustand'
+import type { Row } from './types'
+
+/** 数据库表集合：{ 表名: 行[] }。Web 先行阶段以内存对象承载，localStorage 持久化；
+ *  后续 SQLite/Drizzle 落地时，把本层替换为 Repository 实现即可，上层不变。 */
+export type DB = Record<string, Row[]>
+
+const STORAGE_KEY = 'rdw-db-v3' // v3：R1 设备主数据——类别归属系统（网络→信息网络）、存储并入后端、目录与型号列序调整
+
+function loadPersisted(): DB | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as DB
+    if (typeof parsed !== 'object' || !parsed.projects) return null
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+function persist(db: DB) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(db))
+  } catch {
+    /* 存储满等异常静默 */
+  }
+}
+
+interface DBState {
+  db: DB
+  ready: boolean
+  init: (seed: () => DB) => void
+  getTable: <T>(t: string) => T[]
+  getById: <T>(t: string, id: string) => T | undefined
+  where: <T>(t: string, pred: (row: T) => boolean) => T[]
+  insert: (t: string, row: Row) => void
+  insertMany: (t: string, rows: Row[]) => void
+  update: (t: string, id: string, patch: Record<string, unknown>) => void
+  remove: (t: string, id: string) => void
+  removeMany: (t: string, pred: (row: Row) => boolean) => void
+  replace: (t: string, rows: Row[]) => void
+  reset: () => void
+}
+
+export const useDB = create<DBState>((set, get) => ({
+  db: {},
+  ready: false,
+
+  init: (seed) => {
+    const existing = loadPersisted()
+    const db = existing ?? seed()
+    set({ db, ready: true })
+    persist(db)
+  },
+
+  getTable: (t) => (get().db[t] ?? []) as unknown as never[],
+
+  getById: (t, id) =>
+    (get().db[t] ?? []).find((r) => r.id === id) as unknown as never | undefined,
+
+  where: (t, pred) =>
+    (get().db[t] ?? []).filter((r) => (pred as unknown as (r: Row) => boolean)(r)) as unknown as never[],
+
+  insert: (t, row) =>
+    set((s) => {
+      const db = { ...s.db, [t]: [...(s.db[t] ?? []), row] }
+      persist(db)
+      return { db }
+    }),
+
+  insertMany: (t, rows) =>
+    set((s) => {
+      const db = { ...s.db, [t]: [...(s.db[t] ?? []), ...rows] }
+      persist(db)
+      return { db }
+    }),
+
+  update: (t, id, patch) =>
+    set((s) => {
+      const db = {
+        ...s.db,
+        [t]: (s.db[t] ?? []).map((r) => (r.id === id ? { ...r, ...patch, id } : r)),
+      }
+      persist(db)
+      return { db }
+    }),
+
+  remove: (t, id) =>
+    set((s) => {
+      const db = { ...s.db, [t]: (s.db[t] ?? []).filter((r) => r.id !== id) }
+      persist(db)
+      return { db }
+    }),
+
+  removeMany: (t, pred) =>
+    set((s) => {
+      const db = { ...s.db, [t]: (s.db[t] ?? []).filter((r) => !(pred as (r: Row) => boolean)(r)) }
+      persist(db)
+      return { db }
+    }),
+
+  replace: (t, rows) =>
+    set((s) => {
+      const db = { ...s.db, [t]: rows }
+      persist(db)
+      return { db }
+    }),
+
+  reset: () => {
+    localStorage.removeItem(STORAGE_KEY)
+    set({ db: {}, ready: false })
+  },
+}))
