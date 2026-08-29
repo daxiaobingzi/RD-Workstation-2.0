@@ -4,12 +4,15 @@ import './index.css'
 import App from './app/router.tsx'
 import { useDB } from './db/memory-db'
 import { seedDB } from './seed'
+import { QueryProvider } from './lib/query-provider'
 
 // 初始化数据层：无持久化数据则播种演示数据
 useDB.getState().init(seedDB)
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <QueryProvider>
+      <App />
+    </QueryProvider>
   </StrictMode>,
 )

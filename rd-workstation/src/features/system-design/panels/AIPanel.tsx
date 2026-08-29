@@ -1,10 +1,12 @@
 import { Sparkles } from 'lucide-react'
-import { SystemService, DesignService } from '../../../services'
+import { DesignService } from '../../../services'
+import { DEFAULT_RULES } from '../../../engines/default-rules'
 
-export function AIPanel({ checks, params, onGoto }: { checks: ReturnType<typeof DesignService.check>; params: ReturnType<typeof SystemService.params>; onGoto: (s: string) => void }) {
+export function AIPanel({ checks, onGoto }: { checks: ReturnType<typeof DesignService.check>; onGoto: (s: string) => void }) {
   const warnCount = checks.filter((c) => c.severity !== 'ok').length
-  const bit = Number(params.find((p) => p.parameter_key === 'bitrate_mbps')?.value_json ?? 4)
-  const days = Number(params.find((p) => p.parameter_key === 'storage_days')?.value_json ?? 30)
+  // P3：设计参数步骤已取消，引用引擎兜底默认值
+  const bit = DEFAULT_RULES.bitrateMbps
+  const days = DEFAULT_RULES.storageDays
   const cameras = DesignService.selections('ps_vss_001').length
   void cameras
   return (

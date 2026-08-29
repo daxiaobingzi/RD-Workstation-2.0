@@ -54,11 +54,10 @@ export const ValidationEngine = {
     } else if (cameraSels.length) {
       checks.push({ type: 'missing_camera', severity: 'ok', message: `摄像机选型：${cameraSels.length} 类${cameraSels.reduce((s, x) => s + x.quantity, 0)} 台` })
     }
-    // 点位类别覆盖
-    const catById = new Map(ctx.get<{ id: string; code: string; name: string }>(T.point_categories).map((c) => [c.id, c]))
-    const uncategorized = points.filter((p) => !p.category_id || !catById.has(p.category_id))
-    if (uncategorized.length) {
-      checks.push({ type: 'category_coverage', severity: 'warn', message: `${uncategorized.length} 个点位未归类，将按默认产品选型` })
+    // 点位设备关联覆盖
+    const noDevice = points.filter((p) => !p.device_id)
+    if (noDevice.length) {
+      checks.push({ type: 'device_coverage', severity: 'warn', message: `${noDevice.length} 个点位未关联设备中心，将不参与选型` })
     }
     // 型号停用
     const disabledModels = new Set(models.filter((m) => m.status === 'disabled').map((m) => m.id))

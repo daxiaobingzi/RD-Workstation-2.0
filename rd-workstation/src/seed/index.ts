@@ -18,12 +18,15 @@ export function seedDB(): DB {
   put('grades', baseTables.grades)
   put('system_templates', baseTables.system_templates)
   put('systems', baseTables.systems)
+  put('selection_schemes', baseTables.selection_schemes)
+  put('scheme_rules', baseTables.scheme_rules)
 
   /* ---------- 设备域 ---------- */
   put('device_categories', deviceTables.device_categories)
   put('product_families', deviceTables.product_families)
   put('products', deviceTables.products)
   put('product_models', deviceTables.product_models)
+  put('device_materials', deviceTables.device_materials)
   put('brands', deviceTables.brands)
   put('suppliers', deviceTables.suppliers)
   put('model_brands', deviceTables.model_brands)
@@ -34,6 +37,8 @@ export function seedDB(): DB {
 
   /* ---------- 项目域 ---------- */
   put('projects', demoProjectTables.projects)
+  put('buildings', demoProjectTables.buildings)
+  put('telecom_rooms', demoProjectTables.telecom_rooms)
   put('project_systems', demoProjectTables.project_systems)
 
   /* ---------- 设计域 ---------- */

@@ -44,6 +44,8 @@ export interface Project extends Row {
   planned_end_date?: string
   actual_end_date?: string
   description?: string
+  /** 行拖拽排序序号（列表视图） */
+  sort_order?: number
   created_at: string
   updated_at: string
   archived_at?: string
@@ -80,6 +82,20 @@ export interface SystemTemplate extends Row {
   content_json?: unknown
   enabled?: boolean
 }
+export interface Building extends Row {
+  project_id: string
+  name: string
+  sort_order?: number
+  enabled?: boolean
+  created_at?: string
+  updated_at?: string
+}
+export interface TelecomRoom extends Row {
+  building_id: string
+  name: string
+  sort_order?: number
+  enabled?: boolean
+}
 
 /* ============ 设计域 ============ */
 export interface DesignParameter extends Row {
@@ -104,18 +120,17 @@ export interface PointCategory extends Row {
 export interface Point extends Row {
   project_system_id: string
   point_code: string
-  point_name: string
-  category_id?: string
-  building?: string
-  floor?: string
-  zone?: string
-  space?: string
-  location?: string
+  /** 设备中心产品（设备名称），如"高清枪型摄像机" */
+  device_id: string
+  /** 项目建筑 */
+  building_id?: string
+  /** 项目弱电间（建筑→弱电间） */
+  telecom_room_id?: string
   quantity: number
   unit?: string
-  design_requirement?: string
-  remark?: string
   status: string
+  /** 行拖拽排序序号（列表视图） */
+  sort_order?: number
   created_at?: string
   updated_at?: string
 }
@@ -161,21 +176,62 @@ export interface ProductFamily extends Row {
   sort_order?: number
   enabled?: boolean
 }
+/** 设备类型（设备主数据主体）：语义对齐 Vue 初版"设备字典"中的设备类型（如"网络摄像机(枪式)"）。
+ *  顶层归属：子系统（system_id）→ 设备类型；类别（category）为设备类型属性字段；
+ *  点位"设备名称"、单点定额材料、数量推导链均挂在设备类型上；其下型号（ProductModel）为品牌型号配置行。 */
 export interface Product extends Row {
-  product_family_id: string
+  /** 兼容过渡：U4 摘除引擎引用后可移除；新数据不再依赖 */
+  product_family_id?: string
   name: string
   manufacturer?: string
+  /** 通用参数（富文本 HTML）：设备类型的通用说明/参数，如带宽、夜视能力、接口等 */
+  specification?: string
+  unit?: string
+  /** 子系统归属（sys_vss 等，与 SYSTEM_GROUPS 键一致）——顶层组织属性 */
+  system_id?: string
+  /** 类别标签（front/back/net/cable/aux…，与 DeviceCategory.category_type 一致） */
+  category?: string
   description?: string
+  /** 设备级数量推导链配置（U4 使用）：mode=carry/mul/fixed；source=front/指定设备；factor/reserve/round */
+  chain_json?: string
+  /** 行拖拽排序序号（列表视图） */
+  sort_order?: number
   created_at?: string
 }
+
+/** 设备单点定额材料（P4）：挂载在设备（Product）上，定义"1 点位消耗的材料配比"。
+ *  推导时按 Σ点位数量 × 定额 生成材料数量，用于工程量/清单的线缆、管材、辅材。 */
+export type DeviceMaterialCategory = 'cable' | 'conduit' | 'aux' | 'other'
+export interface DeviceMaterial extends Row {
+  product_id: string
+  category: DeviceMaterialCategory
+  name: string
+  unit: string
+  /** 每 1 点位（每台设备）的定额用量，如 0.3 米/点位 或 1 套/点位 */
+  quantity_per_point: number
+  /** 材料品牌（清单按 品牌+型号 定位材料价格） */
+  brand?: string
+  /** 材料型号（单行文字） */
+  model?: string
+  /** 材料参数（单行文字） */
+  params?: string
+  /** 材料单价（按单位计价；清单材料行优先取此价） */
+  price?: number
+  note?: string
+  enabled?: boolean
+}
+/** 品牌型号配置行：设备类型下的一条"品牌+型号+详细参数+档次+参考价"。
+ *  多品牌备选 = 同一设备类型下多条配置行（各挂不同品牌）。 */
 export interface ProductModel extends Row {
   product_id: string
   model: string
+  /** 传承字段：型号规格（短文本，兼容旧链路/清单展示）；新数据尽量写入 detail_html */
   specification?: string
   unit?: string
   grade_code?: string
   status?: 'active' | 'disabled'
-  parameter_json?: Record<string, unknown>
+  /** 详细参数（供应商实际型号参数，富文本 HTML） */
+  detail_html?: string
   created_at?: string
 }
 export interface Brand extends Row {
@@ -184,6 +240,7 @@ export interface Brand extends Row {
   website?: string
   remark?: string
 }
+/** 型号 ↔ 品牌关联：一个型号绑定一个品牌；多品牌备选体现为同一设备类型下多个型号各挂不同品牌 */
 export interface ModelBrand extends Row {
   model_id: string
   brand_id: string
@@ -242,6 +299,50 @@ export interface DesignResult extends Row {
   formula_snapshot?: string
   rule_snapshot?: string
   created_at: string
+}
+
+/* ============ 选型方案（P5）============ */
+/** 选型方案：一组"设备类型 → 选型偏好"规则的集合。勾选方案后引擎按其执行选型。 */
+export interface SelectionScheme extends Row {
+  name: string
+  system_id?: string
+  description?: string
+  enabled?: boolean
+  is_default?: boolean
+  created_at?: string
+  updated_at?: string
+}
+/** 方案内的选型规则：某设备类型（kind）在指定设备族内，按品牌/档次/型号关键词偏好选型 */
+export interface SchemeRule extends Row {
+  scheme_id: string
+  kind: string
+  family_id?: string
+  brand_id?: string
+  grade_code?: string
+  model_keyword?: string
+  prefer_lowest_price?: boolean
+  priority?: number
+  enabled?: boolean
+}
+
+/** 拓扑节点（P6）：系统结构图节点，手动或由推导结果自动生成 */
+export interface TopologyNode extends Row {
+  project_system_id: string
+  kind: string
+  label: string
+  quantity?: number
+  x?: number
+  y?: number
+  auto?: boolean
+  color?: string
+  created_at?: string
+}
+/** 拓扑连线（P6）：上游 → 下游（如 摄像机 → POE交换机） */
+export interface TopologyEdge extends Row {
+  project_system_id: string
+  from_kind: string
+  to_kind: string
+  label?: string
 }
 
 /* ============ 清单预算域 ============ */
@@ -338,6 +439,7 @@ export interface ActivityLog extends Row {
   task_id?: string
   project_id?: string
   project_system_id?: string
+  goal_id?: string
   started_at?: string
   ended_at?: string
   duration_minutes?: number
@@ -455,6 +557,8 @@ export const T = {
   dictionaries: 'dictionaries',
   grades: 'grades',
   projects: 'projects',
+  buildings: 'buildings',
+  telecom_rooms: 'telecom_rooms',
   project_systems: 'project_systems',
   systems: 'systems',
   system_templates: 'system_templates',
@@ -467,12 +571,17 @@ export const T = {
   product_families: 'product_families',
   products: 'products',
   product_models: 'product_models',
+  device_materials: 'device_materials',
   brands: 'brands',
   model_brands: 'model_brands',
   prices: 'prices',
   suppliers: 'suppliers',
   design_rules: 'design_rules',
   rule_bindings: 'rule_bindings',
+  selection_schemes: 'selection_schemes',
+  scheme_rules: 'scheme_rules',
+  topology_nodes: 'topology_nodes',
+  topology_edges: 'topology_edges',
   design_results: 'design_results',
   bill_versions: 'bill_versions',
   bill_items: 'bill_items',

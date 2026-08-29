@@ -1,24 +1,24 @@
 import { ArrowRight } from 'lucide-react'
-import { PointService, DesignService, BillService } from '../services'
+import { PointService, DesignService, BillService, BudgetService } from '../services'
 import { fmtMoney, fmtNum } from '../lib/utils'
 
-export function DataLinkageStrip({ psId }: { psId: string }) {
+export function DataLinkageStrip({ psId, projectId }: { psId: string; projectId: string }) {
   const points = PointService.list(psId).reduce((s, p) => s + (p.quantity || 0), 0)
   const results = DesignService.results(psId)
   const selections = DesignService.selections(psId)
   const derived = results.reduce((s, r) => s + r.quantity, 0)
   const missing = selections.filter((s) => !s.unit_price || s.unit_price <= 0).length
-  const lastBill = BillService.versions('__latest__').length ? null : null
-  void lastBill
-  const billCount = selections.length
-  const budget = selections.reduce((s, x) => s + x.total_price, 0)
+  const versions = BillService.versions(projectId)
+  const currentVersion = versions[0]
+  const billCount = currentVersion ? BillService.items(currentVersion.id).length : 0
+  const budgetTotal = BudgetService.byProject(projectId).reduce((s, b) => s + b.total_amount, 0)
 
   const steps = [
     { label: '点位', value: `${fmtNum(points)}`, tone: 'default' as const },
     { label: '推导设备', value: `${fmtNum(derived)}`, tone: 'default' as const },
     { label: '缺价', value: `${fmtNum(missing)}`, tone: missing > 0 ? ('warn' as const) : ('ok' as const) },
-    { label: '清单', value: `${fmtNum(billCount)} 项`, tone: 'default' as const },
-    { label: '预算', value: fmtMoney(budget), tone: 'default' as const },
+    { label: '清单', value: `${fmtNum(billCount)} 项`, tone: billCount > 0 ? ('ok' as const) : ('default' as const) },
+    { label: '预算', value: fmtMoney(budgetTotal), tone: budgetTotal > 0 ? ('ok' as const) : ('default' as const) },
   ]
 
   return (

@@ -30,7 +30,7 @@ export const BudgetService = {
     const familyOfModel = new Map<string, string>()
     for (const m of db[T.product_models]) {
       const prod = db[T.products].find((p) => p.id === (m as ProductModel).product_id) as Product | undefined
-      if (prod) familyOfModel.set(m.id, prod.product_family_id)
+      if (prod) familyOfModel.set(m.id, prod.product_family_id ?? '')
     }
     const famName = new Map(db[T.product_families].map((f) => [f.id, (f as ProductFamily).name]))
     const agg = new Map<string, number>()

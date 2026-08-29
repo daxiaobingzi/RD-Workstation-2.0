@@ -1,7 +1,7 @@
 import { repository } from '../db/memory-db'
 import { T } from '../types/domain'
 import type {
-  ModelGradeBinding, Grade, ProductModel, Product, ProductFamily,
+  ModelGradeBinding, Grade, ProductModel, Product,
   DeviceSelection, StandardSystem, ProjectSystem, Project, BillItem,
 } from '../types/domain'
 import { SelectionEngine } from '../engines'
@@ -66,20 +66,23 @@ export const DeviceGrade = {
     return boundIds
   },
 
-  /** 缺价 / 缺档 / 停用被引用的预警统计（缺档口径与选型引擎一致：绑定优先、其次 grade_code、族内无型号不计） */
-  stats(): { missingPrice: number; missingGrade: { familyId: string; familyName: string; grade: string; gradeLabel: string }[]; disabledInUse: number } {
+  /** 缺价 / 缺档 / 停用被引用的预警统计（缺档口径：设备类型 × 档位，绑定/grade_code 优先判定） */
+  stats(): { missingPrice: number; missingGrade: { deviceTypeId: string; deviceTypeName: string; grade: string; gradeLabel: string }[]; disabledInUse: number } {
     const db = repository.db
     const models = db[T.product_models] as ProductModel[]
     const active = models.filter((m) => m.status !== 'disabled')
     const missingPrice = active.filter((m) => this.price(m.id) <= 0).length
-    const famName = new Map((db[T.product_families] ?? []).map((f) => [f.id, (f as ProductFamily).name]))
-    const missingGrade: { familyId: string; familyName: string; grade: string; gradeLabel: string }[] = []
-    for (const fam of db[T.product_families] ?? []) {
-      const farmId = (fam as ProductFamily).id
-      const coverage = this.familyGradeCoverage(farmId)
-      if (!coverage.some((c) => c.count > 0)) continue // 族内无型号不参与缺档判定
-      for (const c of coverage) {
-        if (c.count === 0) missingGrade.push({ familyId: farmId, familyName: famName.get(farmId) ?? '', grade: c.grade, gradeLabel: c.label })
+    const products = (db[T.products] ?? []) as Product[]
+    const gradeCodes = (db[T.grades] ?? []).map((g) => (g as Grade).code)
+    const gradeName = new Map((db[T.grades] ?? []).map((g) => [(g as Grade).code, (g as Grade).name]))
+    const missingGrade: { deviceTypeId: string; deviceTypeName: string; grade: string; gradeLabel: string }[] = []
+    for (const p of products) {
+      const pModels = active.filter((m) => m.product_id === p.id)
+      if (!pModels.length) continue // 无型号的设备类型不参与缺档判定
+      for (const g of gradeCodes) {
+        if (!pModels.some((m) => this.gradeCodeOf(m.id) === g)) {
+          missingGrade.push({ deviceTypeId: p.id, deviceTypeName: p.name, grade: g, gradeLabel: gradeName.get(g) ?? g })
+        }
       }
     }
     const usedIds = new Set((db[T.device_selections] ?? []).map((s) => (s as DeviceSelection).model_id))

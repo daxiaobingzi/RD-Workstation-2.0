@@ -19,10 +19,10 @@ function CategoryFormModal({ open, onClose, onDone, categories }: { open: boolea
     onDone(c.id)
   }
   return (
-    <Modal open={open} onClose={onClose} title="新增设备类别" width={380}>
+    <Modal open={open} onClose={onClose} title="新增设备类别" width={420}>
       <div className="space-y-3">
         <Field label="类别名称" required><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="如 中控台" /></Field>
-        <Field label="归属系统">
+        <Field label="归属系统（弱电智能化系统目录，P2）">
           <Select value={sysId} onChange={(e) => setSysId(e.target.value)}>
             {Object.entries(SYSTEM_GROUPS).filter(([k]) => k !== '__other').map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             <option value="__other">通用（跨系统）</option>

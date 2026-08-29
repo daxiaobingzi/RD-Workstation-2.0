@@ -10,13 +10,11 @@ import { StepCard } from '../panels/StepCard'
 import { RuleConditionBadge } from '../panels/RuleConditionBadge'
 
 export function DeriveStep({ psId, results, onDerive }: { psId: string; results: ReturnType<typeof DesignService.results>; onDerive: () => void }) {
-  const points = PointService.list(psId)
-  const cats = PointService.categories('sys_vss')
-  const catName = new Map(cats.map((c) => [c.id, c.name]))
-  const byCat = new Map<string, number>()
+  const points = PointService.attach(PointService.list(psId))
+  const byDevice = new Map<string, number>()
   for (const p of points) {
-    const key = p.category_id ? (catName.get(p.category_id) ?? '未分类') : '未分类'
-    byCat.set(key, (byCat.get(key) ?? 0) + (p.quantity || 0))
+    const key = p.deviceName ?? '未指定设备'
+    byDevice.set(key, (byDevice.get(key) ?? 0) + (p.quantity || 0))
   }
   // 规则启用条件（来自 rules 表，供展示）
   const rules = useDB.getState().getTable<{ id: string; code: string; condition_json?: string; formula_json: string }>(T.design_rules)
@@ -25,10 +23,10 @@ export function DeriveStep({ psId, results, onDerive }: { psId: string; results:
     <StepCard title="设计推导" desc="DesignEngine 按规则（公式快照）从点位推导设备数量">
       <div className="mb-3 flex justify-end"><Button size="sm" onClick={onDerive}><RefreshCw className="size-3.5" />重新推导</Button></div>
 
-      {byCat.size > 0 && (
+      {byDevice.size > 0 && (
         <div className="mb-3 flex flex-wrap items-center gap-1.5">
-          <span className="text-[11.5px] text-muted">类别分布：</span>
-          {[...byCat.entries()].map(([name, qty]) => (
+          <span className="text-[11.5px] text-muted">设备分布：</span>
+          {[...byDevice.entries()].map(([name, qty]) => (
             <span key={name} className="rounded-full bg-surface-subtle px-2.5 py-0.5 text-[12px] text-muted">
               {name} <b className="font-mono text-ink">{fmtNum(qty)}</b>
             </span>

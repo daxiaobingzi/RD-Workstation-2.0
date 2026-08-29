@@ -1,20 +1,35 @@
 import type { Row } from '../types/domain'
 import { now } from './lib'
 
-const pts: { name: string; cat: string; floor: string; space: string; qty: number; type: string }[] = [
-  { name: '大厅高清枪机', cat: 'pc_in', floor: '1F', space: '大堂', qty: 12, type: 'm_bullet_s' },
-  { name: '标准层走廊半球', cat: 'pc_in', floor: '2-26F', space: '走廊', qty: 150, type: 'm_dome_s' },
-  { name: '电梯轿厢半球', cat: 'pc_ele', floor: 'B1-26F', space: '电梯轿厢', qty: 27, type: 'm_dome_s' },
-  { name: '主出入口枪机', cat: 'pc_ent', floor: '1F', space: '主出入口', qty: 8, type: 'm_bullet_s' },
-  { name: '周界枪机', cat: 'pc_out', floor: '室外', space: '周界', qty: 18, type: 'm_bullet_s' },
-  { name: '地下车库半球', cat: 'pc_in', floor: 'B1-B2', space: '车库', qty: 60, type: 'm_dome_s' },
-  { name: '广场球机', cat: 'pc_out', floor: '室外', space: '广场', qty: 6, type: 'm_ptz_s' },
-  { name: '消防通道半球', cat: 'pc_in', floor: '各层', space: '消防通道', qty: 40, type: 'm_dome_s' },
-  { name: '制高点球机', cat: 'pc_out', floor: '屋顶', space: '制高点', qty: 4, type: 'm_ptz_s' },
-  { name: '库房半球', cat: 'pc_in', floor: 'B1', space: '库房', qty: 16, type: 'm_dome_s' },
-  { name: '财务室半球', cat: 'pc_in', floor: '1F', space: '财务室', qty: 5, type: 'm_dome_s' },
-  { name: '消控值班室半球', cat: 'pc_in', floor: '1F', space: '消控室', qty: 5, type: 'm_dome_s' },
-  { name: '车道枪机', cat: 'pc_ent', floor: '室外', space: '车道出入口', qty: 35, type: 'm_bullet_s' },
+/* ---------- 项目空间结构：建筑 → 弱电间 ---------- */
+const buildings = [
+  { id: 'bld_a', project_id: 'proj_001', name: 'A栋', sort_order: 1, enabled: true, created_at: now, updated_at: now },
+  { id: 'bld_carpark', project_id: 'proj_001', name: '地下车库', sort_order: 2, enabled: true, created_at: now, updated_at: now },
+]
+
+const telecom_rooms = [
+  { id: 'tr_idf1', building_id: 'bld_a', name: '1F-IDF', sort_order: 1, enabled: true },
+  { id: 'tr_idf2', building_id: 'bld_a', name: '2F-IDF', sort_order: 2, enabled: true },
+  { id: 'tr_idf3', building_id: 'bld_a', name: '3F-IDF', sort_order: 3, enabled: true },
+  { id: 'tr_idf6', building_id: 'bld_a', name: '6F-IDF', sort_order: 4, enabled: true },
+  { id: 'tr_idfb1', building_id: 'bld_carpark', name: 'B1-IDF', sort_order: 1, enabled: true },
+]
+
+/* ---------- 点位：设备名称（设备中心产品）+ 建筑 + 弱电间 + 数量 ---------- */
+const pts: { device: string; building: string; telecom?: string; qty: number }[] = [
+  { device: 'prod_bullet', building: 'bld_a', telecom: 'tr_idf1', qty: 12 },
+  { device: 'prod_dome', building: 'bld_a', telecom: 'tr_idf3', qty: 150 },
+  { device: 'prod_dome', building: 'bld_a', telecom: 'tr_idf1', qty: 27 },
+  { device: 'prod_bullet', building: 'bld_a', telecom: 'tr_idf1', qty: 8 },
+  { device: 'prod_bullet', building: 'bld_a', telecom: 'tr_idf6', qty: 18 },
+  { device: 'prod_dome', building: 'bld_carpark', telecom: 'tr_idfb1', qty: 60 },
+  { device: 'prod_ptz', building: 'bld_a', telecom: 'tr_idf1', qty: 6 },
+  { device: 'prod_dome', building: 'bld_a', telecom: 'tr_idf3', qty: 40 },
+  { device: 'prod_ptz', building: 'bld_a', telecom: 'tr_idf6', qty: 4 },
+  { device: 'prod_dome', building: 'bld_carpark', telecom: 'tr_idfb1', qty: 16 },
+  { device: 'prod_dome', building: 'bld_a', telecom: 'tr_idf1', qty: 5 },
+  { device: 'prod_dome', building: 'bld_a', telecom: 'tr_idf1', qty: 5 },
+  { device: 'prod_bullet', building: 'bld_a', telecom: 'tr_idf6', qty: 35 },
 ]
 
 // 点位行：id / point_code 递增编号由 map 索引生成
@@ -22,16 +37,13 @@ const points = pts.map((p, i) => {
   return {
     id: `pt_vss_${String(i + 1).padStart(3, '0')}`,
     project_system_id: 'ps_vss_001',
-    point_code: `VSS-C-${String(i + 1).padStart(3, '0')}`,
-    point_name: p.name,
-    category_id: p.cat,
-    floor: p.floor,
-    space: p.space,
-    location: p.space,
+    point_code: `VSS-${String(i + 1).padStart(3, '0')}`,
+    device_id: p.device,
+    building_id: p.building,
+    telecom_room_id: p.telecom,
     quantity: p.qty,
     unit: '台',
     status: 'designed',
-    remark: p.type,
     created_at: now, updated_at: now,
   }
 })
@@ -75,6 +87,7 @@ const tasks = [
   { id: 'task_3', title: '补充 5 项缺价设备', status: 'todo', priority: 'medium', project_id: 'proj_001', due_at: '2026-08-27T16:00:00', estimated_minutes: 45, created_at: now, updated_at: now },
   { id: 'task_4', title: '导出楼控系统工程量', status: 'done', priority: 'medium', project_id: 'proj_001', completed_at: '2026-08-26T17:30:00', estimated_minutes: 30, actual_minutes: 25, created_at: now, updated_at: now },
   { id: 'task_5', title: '周目标复盘', status: 'todo', priority: 'low', goal_id: 'goal_q3', due_at: '2026-08-28T18:00:00', estimated_minutes: 30, created_at: now, updated_at: now },
+  { id: 'task_6', title: '整理本周项目复盘', status: 'todo', priority: 'medium', goal_id: 'goal_w', due_at: '2026-08-28T18:30:00', estimated_minutes: 30, created_at: now, updated_at: now },
 ]
 
 const schedules = [
@@ -85,8 +98,16 @@ const schedules = [
 ]
 
 const goals = [
+  { id: 'goal_2026', name: '2026 全年完成 20 个项目设计', goal_type: 'metric', period_type: 'year', start_date: '2026-01-01', end_date: '2026-12-31', target_value: 20, current_value: 12, status: 'active' },
   { id: 'goal_q3', name: 'Q3 完成 15 个项目设计', period_type: 'quarter', start_date: '2026-07-01', end_date: '2026-09-30', target_value: 15, current_value: 12, status: 'active' },
   { id: 'goal_q3_subs', parent_goal_id: 'goal_q3', name: '视频监控系统模板沉淀', period_type: 'quarter', target_value: 3, current_value: 2, status: 'active' },
+  { id: 'goal_m', name: '本月完成设计任务 8 个', goal_type: 'metric', period_type: 'month', start_date: '2026-08-01', end_date: '2026-08-31', target_value: 8, current_value: 3, status: 'active' },
+  { id: 'goal_w', name: '本周完成复盘要点', period_type: 'week', start_date: '2026-08-24', end_date: '2026-08-30', target_value: 2, current_value: 1, status: 'active' },
+]
+
+const goal_metrics = [
+  { id: 'gm_1', goal_id: 'goal_2026', metric_type: 'count', source_type: 'project', source_query: 'project_completed_by_period', target_value: 20 },
+  { id: 'gm_2', goal_id: 'goal_m', metric_type: 'count', source_type: 'task', source_query: 'task_done_by_period', target_value: 8 },
 ]
 
 const habits = [
@@ -117,11 +138,14 @@ const documents = [
 /** 演示项目 / 个人工作数据 */
 export const demoProjectTables: Record<string, Row[]> = {
   projects,
+  buildings,
+  telecom_rooms,
   project_systems,
   points,
   tasks,
   schedules,
   goals,
+  goal_metrics,
   habits,
   habit_records,
   knowledge_items,

@@ -1,20 +1,30 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
-import { Plus, Building2, CheckCircle2, FileText, ChevronRight, Download, ArrowLeftRight } from 'lucide-react'
+import { Plus, Building2, CheckCircle2, FileText, ChevronRight, Download, Upload, ArrowLeftRight, CalendarClock, Wallet } from 'lucide-react'
 import { useDB } from '../../../db/memory-db'
 import { T } from '../../../types/domain'
-import { ProjectService, PointService, BillService, BudgetService, TaskService, SystemService } from '../../../services'
+import { ProjectService, PointService, BillService, BudgetService, TaskService, SystemService, ScheduleService } from '../../../services'
 import { StatusBadge } from '../../../components/ui/badge'
 import { Progress } from '../../../components/ui/progress'
 import { Modal } from '../../../components/ui/dialog'
 import { Button } from '../../../components/ui/button'
 import { Table, THead, TBody, TR, TH, TD, NumCell } from '../../../components/ui/table'
+import { SortableTable, type SortableColumn } from '../../../components/ui/sortable-table'
 import { DataLinkageStrip } from '../../../components/data-linkage-strip'
+import { TaskFormModal } from '../../tasks/TaskFormModal'
+import { OverviewMetrics } from './components/OverviewMetrics'
+import { BuildingsTab } from './components/BuildingsTab'
+import { SchedulesTab } from './components/SchedulesTab'
+import { TasksTab } from './components/TasksTab'
+import { DevicesTab } from './components/DevicesTab'
+import { DocumentsTab } from './components/DocumentsTab'
+import { VersionsTab } from './components/VersionsTab'
+import { ReviewTab } from './components/ReviewTab'
 import { toast } from '../../../components/ui/toast'
 import { fmtMoney, fmtNum } from '../../../lib/utils'
 import { cn } from '../../../lib/utils'
 
-const TABS = ['overview', 'systems', 'tasks', 'schedules', 'points', 'devices', 'bills', 'budget', 'documents', 'revisions', 'review']
+const TABS = ['overview', 'buildings', 'systems', 'tasks', 'schedules', 'points', 'devices', 'bills', 'budget', 'documents', 'revisions', 'review']
 
 export function ProjectDetailPage() {
   const { projectId } = useParams<{ projectId: string }>()
@@ -22,6 +32,9 @@ export function ProjectDetailPage() {
   const location = useLocation()
   const navigate = useNavigate()
   const [addSysOpen, setAddSysOpen] = useState(false)
+  const [backupOpen, setBackupOpen] = useState(false)
+  const [taskModalOpen, setTaskModalOpen] = useState(false)
+  const [selPsId, setSelPsId] = useState('')
 
   const project = projectId ? ProjectService.get(projectId) : undefined
   if (!project) {
@@ -31,15 +44,32 @@ export function ProjectDetailPage() {
   const tab = TABS.find((t) => location.pathname.endsWith(`/${t}`)) ?? 'overview'
   const systems = ProjectService.systems(project.id)
   const tasks = TaskService.list({ projectId: project.id })
+  const budgets = BudgetService.byProject(project.id)
+  const schedules = ScheduleService.byProject(project.id).filter((s) => new Date(s.start_at) >= new Date()).slice(0, 4)
   const docs = useDB.getState().getTable<{ id: string; project_id?: string; type?: string; title: string; version?: string; status?: string }>(T.documents).filter((d) => d.project_id === project.id)
-  const vssPs = systems[0]
-  const points = vssPs ? PointService.list(vssPs.id) : []
+  const overviewPs = systems[0]
+  // D1：点位 tab 支持子系统切换；未指定时默认第一系统
+  const pointPs = selPsId ? (systems.find((s) => s.id === selPsId) ?? systems[0]) : systems[0]
+  const points = pointPs ? PointService.list(pointPs.id) : []
+
+  const triggerExportBackup = () => {
+    const json = ProjectService.exportBackup(project.id)
+    const blob = new Blob([json], { type: 'application/json;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${project.project_code}-backup.rdw.json`
+    a.click()
+    URL.revokeObjectURL(url)
+    toast('项目备份已导出')
+  }
 
   const renderTab = () => {
     switch (tab) {
       case 'overview':
         return (
           <div className="space-y-4">
+            <OverviewMetrics projectId={project.id} />
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
               <section className="lg:col-span-4">
                 <Panel title="项目摘要">
@@ -86,29 +116,59 @@ export function ProjectDetailPage() {
                     ))}
                     {!systems.length && <p className="text-[12px] text-faint">还没有子系统，点击「添加系统」开始设计。</p>}
                   </ul>
+                  {/* 预算状态（P1-3）：已生成预算显示总额，未生成提示 */}
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/projects/${project.id}/budget`)}
+                    className="mt-3 flex w-full items-center gap-2 rounded-md border border-rule bg-surface-subtle/60 px-3 py-2 text-left transition-colors hover:border-accent/40"
+                  >
+                    <Wallet className={cn('size-3.5', budgets.length ? 'text-ok' : 'text-faint')} />
+                    <span className="text-[12.5px] font-medium">项目预算</span>
+                    {budgets.length ? (
+                      <span className="ml-auto font-mono text-[12.5px] font-semibold text-ink">{fmtMoney(budgets.reduce((s, b) => s + b.total_amount, 0))}</span>
+                    ) : (
+                      <span className="ml-auto text-[12px] text-faint">未生成预算，点击前往 →</span>
+                    )}
+                  </button>
                 </Panel>
               </section>
             </div>
 
-            {vssPs && (
+            {overviewPs && (
               <Panel title="数据联动 · 视频监控系统">
-                <DataLinkageStrip psId={vssPs.id} />
+                <DataLinkageStrip psId={overviewPs.id} projectId={project.id} />
               </Panel>
             )}
 
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <Panel title="近期任务" count={tasks.length}>
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              <Panel
+                title="近期任务"
+                count={tasks.length}
+                extra={<Button size="xs" variant="outline" onClick={() => setTaskModalOpen(true)}><Plus className="size-3" />新建</Button>}
+              >
                 <ul className="space-y-1">
                   {tasks.slice(0, 5).map((t) => (
                     <li key={t.id} className="flex items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-hover">
                       <button type="button" aria-label={t.title} onClick={() => TaskService.toggle(t.id)} className="flex size-4 items-center justify-center rounded-[4px] border border-rule bg-surface">
                         {t.status === 'done' && <CheckCircle2 className="size-4 text-ok" />}
                       </button>
-                      <span className={cn('flex-1 text-[13px]', t.status === 'done' ? 'text-faint line-through' : 'text-ink')}>{t.title}</span>
+                      <span className={cn('flex-1 truncate text-[13px]', t.status === 'done' ? 'text-faint line-through' : 'text-ink')}>{t.title}</span>
                       <StatusBadge status={t.status === 'done' ? 'done' : t.status === 'doing' ? 'designing' : 'todo'} />
                     </li>
                   ))}
                   {!tasks.length && <p className="px-2 py-1 text-[12px] text-faint">暂无任务</p>}
+                </ul>
+              </Panel>
+              <Panel title="近期日程" count={schedules.length}>
+                <ul className="space-y-1">
+                  {schedules.map((s) => (
+                    <li key={s.id} className="flex items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-hover">
+                      <CalendarClock className="size-3.5 shrink-0 text-accent" />
+                      <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink">{s.title}</span>
+                      <span className="shrink-0 font-mono text-[10.5px] text-faint">{s.start_at.slice(5, 10).replace('-', '/')}</span>
+                    </li>
+                  ))}
+                  {!schedules.length && <p className="px-2 py-1 text-[12px] text-faint">暂无排期，可在「日程」页添加</p>}
                 </ul>
               </Panel>
               <Panel title={`文档（${docs.length}）`}>
@@ -127,67 +187,64 @@ export function ProjectDetailPage() {
           </div>
         )
 
+      case 'buildings':
+        return <BuildingsTab projectId={project.id} />
+
       case 'systems':
         return (
           <div className="space-y-4">
             <div className="flex justify-end"><Button size="sm" variant="secondary" onClick={() => setAddSysOpen(true)}><Plus className="size-3.5" />添加系统</Button></div>
-            <div className="rounded-lg border border-rule bg-surface">
-              <Table>
-                <THead><TR><TH>系统</TH><TH>编码</TH><TH>档次</TH><TH>进度</TH><TH>状态</TH><TH>操作</TH></TR></THead>
-                <TBody>
-                  {systems.map((s) => (
-                    <TR key={s.id} className="hover:bg-hover">
-                      <TD className="font-medium">{s.systemName}</TD>
-                      <TD><NumCell>{s.systemCode}</NumCell></TD>
-                      <TD className="text-muted">{gradeName(s.design_grade)}</TD>
-                      <TD><div className="w-36"><Progress value={s.progress} showLabel /></div></TD>
-                      <TD><StatusBadge status={s.status} /></TD>
-                      <TD>
-                        <Button size="xs" variant="outline" onClick={() => navigate(`/projects/${project.id}/systems/${s.id}`)}>进入设计</Button>
-                      </TD>
-                    </TR>
-                  ))}
-                </TBody>
-              </Table>
-            </div>
+            <SystemsTable projectId={project.id} systems={systems} onOpen={(s) => navigate(`/projects/${project.id}/systems/${s}`)} />
           </div>
         )
 
       case 'tasks':
-        return (
-          <div className="rounded-lg border border-rule bg-surface">
-            <Table>
-              <THead><TR><TH></TH><TH>任务</TH><TH>优先级</TH><TH>截止</TH><TH>状态</TH></TR></THead>
-              <TBody>
-                {tasks.map((t) => (
-                  <TR key={t.id}>
-                    <TD className="w-8 pr-0">
-                      <button type="button" aria-label={t.title} onClick={() => TaskService.toggle(t.id)} className="flex size-4 items-center justify-center rounded-[4px] border border-rule bg-surface">
-                        {t.status === 'done' && <CheckCircle2 className="size-4 text-ok" />}
-                      </button>
-                    </TD>
-                    <TD className="font-medium">{t.title}</TD>
-                    <TD><PriorityChip p={t.priority} /></TD>
-                    <TD className="font-mono text-[12px] text-muted">{t.due_at?.slice(0, 10)}</TD>
-                    <TD><StatusBadge status={t.status === 'done' ? 'done' : t.status === 'blocked' ? 'blocked' : t.status === 'doing' ? 'designing' : 'todo'} /></TD>
-                  </TR>
-                ))}
-              </TBody>
-            </Table>
-            {!tasks.length && <p className="px-4 py-6 text-center text-[12.5px] text-faint">暂无任务</p>}
-          </div>
-        )
+        return <TasksTab projectId={project.id} />
+
+      case 'schedules':
+        return <SchedulesTab projectId={project.id} />
 
       case 'points':
-        return vssPs ? (
-          <PointsTable psId={vssPs.id} points={points} />
-        ) : <p className="p-8 text-center text-muted">请先添加系统</p>
+        return (
+          <div className="space-y-3">
+            {systems.length > 1 && (
+              <div className="flex items-center gap-2">
+                <span className="text-[12px] text-muted">子系统</span>
+                <select
+                  value={pointPs?.id ?? ''}
+                  onChange={(e) => setSelPsId(e.target.value)}
+                  className="h-7 rounded-[6px] border border-rule bg-surface px-2 text-[12.5px]"
+                >
+                  {systems.map((s) => (
+                    <option key={s.id} value={s.id}>{s.systemCode} · {s.systemName}</option>
+                  ))}
+                </select>
+                {pointPs && <span className="font-mono text-[11px] text-faint">{points.length} 个点位</span>}
+              </div>
+            )}
+            {pointPs ? (
+              <PointsTable points={points} />
+            ) : <p className="p-8 text-center text-muted">请先添加系统</p>}
+          </div>
+        )
 
       case 'bills':
         return <BillsTab projectId={project.id} />
 
       case 'budget':
         return <BudgetTab projectId={project.id} />
+
+      case 'devices':
+        return <DevicesTab projectId={project.id} />
+
+      case 'documents':
+        return <DocumentsTab projectId={project.id} />
+
+      case 'revisions':
+        return <VersionsTab projectId={project.id} />
+
+      case 'review':
+        return <ReviewTab projectId={project.id} projectName={project.name} />
 
       default:
         return (
@@ -202,14 +259,28 @@ export function ProjectDetailPage() {
     <div className="mx-auto max-w-[1080px] space-y-4 p-5">
       <div>
         <h1 className="font-display text-xl font-bold tracking-tight">{project.name}</h1>
-        <p className="mt-1 flex items-center gap-2 text-[12.5px] text-muted">
+        <div className="mt-1 flex items-center gap-2 text-[12.5px] text-muted">
           <span className="font-mono">{project.project_code}</span>
           <span>·</span>
           <StatusBadge status={project.status} />
           <span className="flex items-center gap-1"><Building2 className="size-3.5" />{project.building_type}</span>
-        </p>
+          <span className="ml-auto">
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={triggerExportBackup}><Download className="size-3.5" />导出备份</Button>
+              <Button size="sm" variant="outline" onClick={() => setBackupOpen(true)}><Upload className="size-3.5" />导入备份</Button>
+            </div>
+          </span>
+        </div>
       </div>
       {renderTab()}
+
+      {/* 统一任务表单（P1-2）：项目主页新建任务，可关联目标 */}
+      <TaskFormModal
+        key={taskModalOpen ? 'open' : 'closed'}
+        open={taskModalOpen}
+        onClose={() => setTaskModalOpen(false)}
+        projectId={project.id}
+      />
 
       <Modal
         open={addSysOpen}
@@ -242,7 +313,43 @@ export function ProjectDetailPage() {
           })}
         </div>
       </Modal>
+
+      <ImportBackupModal open={backupOpen} onClose={() => setBackupOpen(false)} />
     </div>
+  )
+}
+
+/* ---------- 导入备份弹窗 ---------- */
+function ImportBackupModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const fileRef = useRef<HTMLInputElement>(null)
+  const doImport = (file?: File) => {
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      const res = ProjectService.importBackup(String(reader.result ?? ''))
+      if (res.ok) toast(res.message ?? '已导入项目备份')
+      else toast(res.message ?? '备份导入失败', 'warn')
+      if (res.ok) onClose()
+    }
+    reader.readAsText(file)
+  }
+  return (
+    <Modal open={open} onClose={onClose} title="导入项目备份" width={440}>
+      <div className="space-y-3">
+        <p className="text-[12.5px] text-muted">
+          选择由本应用导出的 <span className="font-mono">*.rdw.json</span> 备份文件。导入将按 id 合并项目表数据：已存在的记录被覆盖，新记录被插入。
+        </p>
+        <label className="flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-md border border-dashed border-rule py-8 text-faint transition-colors hover:border-accent/50 hover:text-accent">
+          <Upload className="size-6" />
+          <span className="text-[12.5px]">点击选择备份文件</span>
+          <input ref={fileRef} type="file" accept=".json,.rdw.json" className="hidden" onChange={(e) => { doImport(e.target.files?.[0]); e.target.value = '' }} />
+        </label>
+        <div className="flex justify-end gap-2">
+          <Button size="sm" variant="outline" onClick={onClose}>取消</Button>
+          <Button size="sm" onClick={() => fileRef.current?.click()}>选择文件</Button>
+        </div>
+      </div>
+    </Modal>
   )
 }
 
@@ -265,35 +372,76 @@ function gradeName(code?: string) {
 }
 
 function tabLabel(tab: string) {
-  return { overview: '概览', systems: '系统', tasks: '任务', schedules: '日程', points: '点位', devices: '设备', bills: '清单', budget: '预算', documents: '文档', revisions: '版本', review: '复盘' }[tab] ?? tab
+  return { overview: '概览', buildings: '建筑', systems: '系统', tasks: '任务', schedules: '日程', points: '点位', devices: '设备', bills: '清单', budget: '预算', documents: '文档', revisions: '版本', review: '复盘' }[tab] ?? tab
 }
 
-function PriorityChip({ p }: { p: string }) {
-  const map: Record<string, string> = { high: 'text-danger', medium: 'text-warn', low: 'text-faint', urgent: 'text-danger' }
-  return <span className={cn('text-[12px] font-medium', map[p] ?? 'text-muted')}>{p === 'urgent' ? '紧急' : p === 'high' ? '高' : p === 'medium' ? '中' : '低'}</span>
-}
-
-function PointsTable({ psId, points }: { psId: string; points: ReturnType<typeof PointService.list> }) {
-  const cats = PointService.categories(useDB.getState().getById<{ id: string; system_id: string }>(T.project_systems, psId)?.system_id ?? 'sys_vss')
-  const catName = (id?: string) => cats.find((c) => c.id === id)?.name ?? '—'
+/** 项目系统列表（SortableTable：列宽拖/双击自适应/Ctrl+←→/列拖拽换序/布局记忆/行拖拽排序持久化） */
+function SystemsTable({ projectId, systems, onOpen }: {
+  projectId: string
+  systems: ReturnType<typeof ProjectService.systems>
+  onOpen: (psId: string) => void
+}) {
+  const [rows, setRows] = useState(systems)
+  useEffect(() => { setRows(systems) }, [systems])
+  const reorder = (from: number, to: number) => {
+    if (from === to) return
+    const next = [...rows]
+    const [mv] = next.splice(from, 1)
+    next.splice(to, 0, mv)
+    setRows(next)
+    next.forEach((s, i) => { if (s.sort_order !== i) ProjectService.updateSystem(s.id, { sort_order: i }) })
+  }
+  const columns = useMemo<SortableColumn<(typeof systems)[number]>[]>(() => [
+    { key: 'systemName', title: '系统', width: 240, minWidth: 180, render: (s) => <span className="text-[13px] font-medium">{s.systemName}</span> },
+    { key: 'systemCode', title: '编码', width: 130, render: (s) => <span className="font-mono text-[12px] text-muted">{s.systemCode || '—'}</span> },
+    { key: 'design_grade', title: '档次', width: 100, render: (s) => <span className="text-muted">{gradeName(s.design_grade)}</span> },
+    { key: 'progress', title: '进度', width: 160, render: (s) => <div className="w-36"><Progress value={s.progress} showLabel /></div> },
+    { key: 'status', title: '状态', width: 90, render: (s) => <StatusBadge status={s.status} /> },
+    { key: 'action', title: '操作', width: 110, render: (s) => <Button size="xs" variant="outline" onClick={() => onOpen(s.id)}>进入设计</Button> },
+  ], [onOpen])
   return (
     <div className="rounded-lg border border-rule bg-surface">
-      <Table>
-        <THead><TR><TH>编号</TH><TH>名称</TH><TH>类别</TH><TH>楼层</TH><TH>位置</TH><TH>数量</TH></TR></THead>
-        <TBody>
-          {points.map((p) => (
-            <TR key={p.id} className="hover:bg-hover">
-              <TD><NumCell>{p.point_code}</NumCell></TD>
-              <TD className="font-medium">{p.point_name}</TD>
-              <TD className="text-muted">{catName(p.category_id)}</TD>
-              <TD className="text-muted">{p.floor}</TD>
-              <TD className="text-muted">{p.space}</TD>
-              <TD><NumCell>{fmtNum(p.quantity)}</NumCell></TD>
-            </TR>
-          ))}
-        </TBody>
-      </Table>
-      {!points.length && <p className="px-4 py-6 text-center text-[12.5px] text-faint">暂无点位，请到系统设计工作区录入</p>}
+      <SortableTable
+        columns={columns}
+        rows={rows}
+        rowKey={(s) => s.id}
+        storageKey={`psys-${projectId}`}
+        onReorder={reorder}
+      />
+    </div>
+  )
+}
+
+/** 点位表（SortableTable：列宽拖/双击自适应/Ctrl+←→/列拖拽换序/布局记忆/行拖拽排序持久化） */
+function PointsTable({ points }: { points: ReturnType<typeof PointService.list> }) {
+  const attached = useMemo(() => PointService.attach(points), [points])
+  const [rows, setRows] = useState(attached)
+  useEffect(() => { setRows(attached) }, [attached])
+  const reorder = (from: number, to: number) => {
+    if (from === to) return
+    const next = [...rows]
+    const [mv] = next.splice(from, 1)
+    next.splice(to, 0, mv)
+    setRows(next)
+    next.forEach((p, i) => { if (p.sort_order !== i) PointService.update(p.id, { sort_order: i }) })
+  }
+  const columns = useMemo<SortableColumn<(typeof attached)[number]>[]>(() => [
+    { key: 'point_code', title: '编号', width: 110, render: (p) => <span className="font-mono text-[12px] text-accent">{p.point_code}</span> },
+    { key: 'device', title: '设备名称', width: 280, minWidth: 180, render: (p) => <span className="text-[13px] font-medium">{p.deviceName ?? '—'}</span> },
+    { key: 'building', title: '建筑', width: 150, render: (p) => <span className="text-muted">{p.buildingName ?? '—'}</span> },
+    { key: 'room', title: '弱电间', width: 150, render: (p) => <span className="text-muted">{p.telecomRoomName ?? '—'}</span> },
+    { key: 'quantity', title: '数量', width: 90, align: 'right', render: (p) => <span className="font-mono text-[12px]">{fmtNum(p.quantity)}</span> },
+  ], [])
+  return (
+    <div className="rounded-lg border border-rule bg-surface">
+      <SortableTable
+        columns={columns}
+        rows={rows}
+        rowKey={(p) => p.id}
+        storageKey="points"
+        onReorder={reorder}
+        empty={<p className="px-4 py-6 text-center text-[12.5px] text-faint">暂无点位，请到系统设计工作区录入</p>}
+      />
     </div>
   )
 }

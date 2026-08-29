@@ -6,7 +6,7 @@ import type { Repository } from '../repositories/repository'
  *  后续 SQLite/Drizzle 落地时，把本层替换为 Repository 实现即可，上层不变。 */
 export type DB = Record<string, Row[]>
 
-const STORAGE_KEY = 'rdw-db-v3' // v3：R1 设备主数据——类别归属系统（网络→信息网络）、存储并入后端、目录与型号列序调整
+const STORAGE_KEY = 'rdw-db-v5' // v5：点位收敛为「设备名称/建筑/弱电间/数量」，去除"区域"层级（用户决策）
 
 function loadPersisted(): DB | null {
   try {

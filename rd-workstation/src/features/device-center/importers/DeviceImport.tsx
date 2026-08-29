@@ -1,8 +1,8 @@
 import { useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { ClipboardPaste, FileSpreadsheet, Download, UploadCloud, CheckCircle2, AlertTriangle } from 'lucide-react'
-import { DeviceService } from '../../../services'
-import type { ProductFamily, Brand } from '../../../types/domain'
+import { DeviceService, type DeviceTypeView } from '../../../services'
+import type { Brand } from '../../../types/domain'
 import { Modal } from '../../../components/ui/dialog'
 import { Button } from '../../../components/ui/button'
 import { Textarea, Field } from '../../../components/ui/field'
@@ -11,29 +11,56 @@ import { Table, THead, TBody, TR, TH, TD } from '../../../components/ui/table'
 import { toast } from '../../../components/ui/toast'
 
 interface ImportRow {
-  familyId?: string
-  familyName?: string
+  deviceTypeId: string
+  deviceTypeName: string
   model: string
   brandId?: string
-  spec?: string
   gradeCode?: string
+  refPrice?: string
   unit?: string
-  params?: Record<string, unknown>
+  genericHtml?: string
+  detailHtml?: string
 }
 
 const GRADE_ALIAS: Record<string, string> = { 经济: 'economic', 经济型: 'economic', 标准: 'standard', 标准型: 'standard', 高端: 'premium', 高端型: 'premium' }
 
-function parseMatrix(rows: (string | number)[][], families: ProductFamily[], brands: Brand[]): { rows: ImportRow[]; errors: { line: number; message: string }[] } {
-  const famByName = new Map(families.map((f) => [f.name, f]))
-  const famByCode = new Map(families.map((f) => [f.code, f]))
-  const famById = new Map(families.map((f) => [f.id, f]))
+/** 解析一行文本为字段数组（支持双引号包裹段：引号内允许逗号，"" 表示引号本身）。
+ *  富文本列（通用/详细参数）因此可含逗号；换行请用 <br>（textarea 为单行记录）。 */
+function parseCsvRecord(line: string): string[] {
+  const out: string[] = []
+  let cur = ''
+  let inQ = false
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]
+    if (inQ) {
+      if (ch === '"') {
+        if (line[i + 1] === '"') { cur += '"'; i++ } else inQ = false
+      } else cur += ch
+    } else if (ch === '"') {
+      inQ = true
+    } else if (ch === ',' || ch === '，' || ch === ';' || ch === '；' || ch === '\t') {
+      out.push(cur); cur = ''
+    } else cur += ch
+  }
+  out.push(cur)
+  return out.map((s) => s.trim())
+}
+
+function parseMatrix(rows: (string | number)[][], devTypes: DeviceTypeView[], brands: Brand[]): { rows: ImportRow[]; errors: { line: number; message: string }[] } {
   const brandByName = new Map(brands.map((b) => [b.name, b]))
-  const matchFam = (s: string) => famByName.get(s) ?? famByCode.get(s) ?? famById.get(s)
-  const matchBrand = (s: string) => brandByName.get(s)
+  const matchBrand = (s: string): Brand | undefined => {
+    const hit = brandByName.get(s)
+    if (hit) return hit
+    if (!s) return undefined
+    // 未收录品牌一键归库（对齐 Vue 品牌池）
+    const created = DeviceService.addBrand({ name: s, manufacturer_type: 'domestic' })
+    brandByName.set(s, created)
+    return created
+  }
   const grade = (s: string) => GRADE_ALIAS[s] ?? s
 
   // 表头识别（可选）
-  const headerMap: Record<string, number> = { 产品族: 0, 型号: 1, 品牌: 2, 规格: 3, 档次: 4, 单位: 5, 参数: 6 }
+  const headerMap: Record<string, number> = { 设备名称: 0, 品牌: 1, 型号: 2, 档次: 3, 参考价: 4, 单位: 5, 通用参数: 6, 详细参数: 7 }
   const first = (rows[0] ?? []).map((c) => String(c).trim())
   const hasHeader = first.some((h) => Object.keys(headerMap).some((k) => h.includes(k)))
   const src = hasHeader ? rows.slice(1) : rows
@@ -43,51 +70,42 @@ function parseMatrix(rows: (string | number)[][], families: ProductFamily[], bra
   src.forEach((raw, idx) => {
     const line = (hasHeader ? 2 : 1) + idx
     const cell = (i: number) => String(raw[i] ?? '').trim()
-    const model = cell(1)
+    const model = cell(2)
     if (!model) { errors.push({ line, message: '缺少型号名称，已跳过' }); return }
-    const famRaw = cell(0)
-    const fam = famRaw ? matchFam(famRaw) : undefined
-    if (famRaw && !fam) { errors.push({ line, message: `产品族「${famRaw}」不存在，已跳过` }); return }
-    const brandRaw = cell(2)
+    const devName = cell(0)
+    if (!devName) { errors.push({ line, message: '缺少设备名称，已跳过' }); return }
+    const devType = devTypes.find((t) => t.product.name === devName)
+    const brandRaw = cell(1)
     const brand = brandRaw ? matchBrand(brandRaw) : undefined
-    const params: Record<string, unknown> = {}
-    if (cell(6)) {
-      cell(6).split(/[;；]/).forEach((pair) => {
-        const [k, v] = pair.split('=')
-        if (k?.trim()) params[k.trim()] = (v ?? '').trim() || true
-      })
-    }
     out.push({
-      familyId: fam?.id,
-      familyName: famRaw || fam?.name,
+      deviceTypeId: devType?.product.id ?? '',
+      deviceTypeName: devName,
       model,
       brandId: brand?.id,
-      spec: cell(3) || undefined,
-      gradeCode: cell(4) ? grade(cell(4)) : undefined,
+      gradeCode: cell(3) ? grade(cell(3)) : undefined,
+      refPrice: cell(4) || undefined,
       unit: cell(5) || undefined,
-      params,
+      genericHtml: cell(6) || undefined,
+      detailHtml: cell(7) || undefined,
     })
   })
   return { rows: out, errors }
 }
 
-/** 设备型号批量导入：按「产品族,型号,品牌,规格,档次,单位,参数」解析并批量新增 */
-export function DeviceImportModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+/** 设备批量导入：列 = 设备名称, 品牌, 型号, 档次, 参考价, 单位, 通用参数, 详细参数。
+ *  通用/详细参数为富文本且放最后两列：含逗号时整段用双引号包裹，换行用 <br>。 */
+export function DeviceImportModal({ open, onClose, defaultSystemId }: { open: boolean; onClose: () => void; defaultSystemId?: string }) {
   const [mode, setMode] = useState<'paste' | 'file'>('paste')
-  const [text, setText] = useState('产品族,型号,品牌,规格,档次,单位,参数\nNVR,NVR-32路,海康威视,32路 NVR,标准,台,路数=32\n摄像机,4K枪机,海康威视,4MP 星光,高端,台,镜头=2.8mm')
+  const [text, setText] = useState('设备名称,品牌,型号,档次,参考价,单位,通用参数,详细参数\n高清枪型摄像机,海康威视,DS-2CD2646FW,标准,1280,台,"<b>图像</b>：4MP","<p><b>镜头</b>：2.8-12mm</p>"')
   const [result, setResult] = useState<{ rows: ImportRow[]; errors: { line: number; message: string }[] } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  const families = DeviceService.families()
   const brands = DeviceService.brands()
 
   const parseText = () => {
     const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
-    const matrix = lines.map((l) => {
-      const s = l.includes('\t') ? '\t' : l.includes('，') ? '，' : l.includes('；') ? '；' : l.includes(';') ? ';' : ','
-      return l.split(s).map((c) => c.trim())
-    })
-    setResult(parseMatrix(matrix, families, brands))
+    const matrix = lines.map((l) => parseCsvRecord(l))
+    setResult(parseMatrix(matrix, DeviceService.deviceTypes(), brands))
   }
 
   const onFile = async (file: File) => {
@@ -96,7 +114,7 @@ export function DeviceImportModal({ open, onClose }: { open: boolean; onClose: (
       const wb = XLSX.read(buf)
       const ws = wb.Sheets[wb.SheetNames[0]]
       const matrix = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: '' }).map((r) => r.map((c) => String(c)))
-      setResult(parseMatrix(matrix as (string | number)[][], families, brands))
+      setResult(parseMatrix(matrix as (string | number)[][], DeviceService.deviceTypes(), brands))
     } catch {
       toast('文件解析失败，请使用 CSV 或 Excel', 'error')
     }
@@ -104,24 +122,34 @@ export function DeviceImportModal({ open, onClose }: { open: boolean; onClose: (
 
   const importAll = () => {
     if (!result) return
-    const done = result.rows.filter((r) => r.familyId)
     let ok = 0
-    const unbound: string[] = []
-    for (const r of done) {
+    const failed: string[] = []
+    for (const r of result.rows) {
+      // 设备：已有则复用，否则按名称+通用参数+单位新建（归入当前子系统）
+      let pid = r.deviceTypeId
+      if (!pid) {
+        const dev = DeviceService.addDeviceType({ name: r.deviceTypeName, system_id: defaultSystemId, category: 'front', specification: r.genericHtml, unit: r.unit })
+        pid = dev.id
+      }
       const created = DeviceService.addModel({
-        product_family_id: r.familyId!, model: r.model, specification: r.spec, unit: r.unit, grade_code: r.gradeCode, status: 'active', parameter_json: r.params, brand_id: r.brandId,
+        product_id: pid, model: r.model, unit: r.unit, grade_code: r.gradeCode, status: 'active',
+        detail_html: r.detailHtml || undefined, brand_id: r.brandId,
       })
-      if (created) ok++
+      if (created) {
+        const p = Number(r.refPrice)
+        if (p > 0) DeviceService.setPrice(created.id, 'reference', p, { source: '批量导入' })
+        ok++
+      } else {
+        failed.push(r.model + (r.deviceTypeId ? '' : `（新建设备：${r.deviceTypeName}）`))
+      }
     }
-    // 无法归族的行单独列出
-    result.rows.filter((r) => !r.familyId).forEach((r) => unbound.push(r.model))
-    toast(`成功导入 ${ok} 个型号${unbound.length ? `，${unbound.length} 个无法归族未导入` : ''}${result.errors.length ? `，跳过 ${result.errors.length} 条问题行` : ''}`)
+    toast(`成功导入 ${ok} 个型号${failed.length ? `，${failed.length} 个失败` : ''}${result.errors.length ? `，跳过 ${result.errors.length} 条问题行` : ''}`)
     setResult(null)
-    if (!unbound.length) onClose()
+    if (!failed.length) onClose()
   }
 
   const downloadTpl = () => {
-    const blob = new Blob(['\uFEFF产品族,型号,品牌,规格,档次,单位,参数\nNVR,NVR-32路,海康威视,32路 NVR,标准,台,路数=32'], { type: 'text/csv;charset=utf-8' })
+    const blob = new Blob(['\uFEFF设备名称,品牌,型号,档次,参考价,单位,通用参数,详细参数\n高清枪型摄像机,海康威视,DS-2CD2646FW,标准,1280,台,"<b>图像</b>：4MP","<p><b>镜头</b>：2.8-12mm</p>"'], { type: 'text/csv;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -143,7 +171,7 @@ export function DeviceImportModal({ open, onClose }: { open: boolean; onClose: (
         </div>
 
         {mode === 'paste' ? (
-          <Field label="表头：产品族, 型号, 品牌, 规格, 档次, 单位, 参数（参数用 键=值; 分隔）">
+          <Field label="表头：设备名称, 品牌, 型号, 档次, 参考价, 单位, 通用参数, 详细参数（通用/详细参数为富文本放最后两列，含逗号时用双引号包裹，换行用 &lt;br&gt;；品牌未收录自动归库）">
             <Textarea className="h-36 font-mono text-[12px]" value={text} onChange={(e) => { setText(e.target.value); setResult(null) }} />
           </Field>
         ) : (
@@ -160,8 +188,8 @@ export function DeviceImportModal({ open, onClose }: { open: boolean; onClose: (
 
         <div className="flex justify-end gap-2">
           {mode === 'paste' && <Button size="sm" variant="outline" onClick={parseText}><ClipboardPaste className="size-3.5" />解析预览</Button>}
-          <Button size="sm" disabled={!result?.rows.filter((r) => r.familyId).length} onClick={importAll}>
-            <UploadCloud className="size-3.5" />批量导入{result ? `（${result.rows.filter((r) => r.familyId).length}）` : ''}
+          <Button size="sm" disabled={!result?.rows.length} onClick={importAll}>
+            <UploadCloud className="size-3.5" />批量导入{result ? `（${result.rows.length}）` : ''}
           </Button>
         </div>
 
@@ -173,17 +201,16 @@ export function DeviceImportModal({ open, onClose }: { open: boolean; onClose: (
             </p>
             <div className="max-h-48 overflow-auto rounded-md border border-rule">
               <Table>
-                <THead><TR><TH>产品族</TH><TH>型号</TH><TH>品牌</TH><TH>规格</TH><TH>档次</TH><TH>单位</TH><TH>参数</TH></TR></THead>
+                <THead><TR><TH>设备名称</TH><TH>品牌</TH><TH>型号</TH><TH>档次</TH><TH>参考价</TH><TH>单位</TH></TR></THead>
                 <TBody>
                   {result.rows.slice(0, 30).map((r, i) => (
                     <TR key={i}>
-                      <TD className={r.familyId ? '' : 'text-warn'}>{r.familyName || '未匹配'}</TD>
-                      <TD className="font-medium">{r.model}</TD>
-                      <TD className="text-muted">{r.brandId ? '✓' : '—'}</TD>
-                      <TD className="max-w-[180px] truncate text-muted">{r.spec || '—'}</TD>
+                      <TD>{r.deviceTypeName}{!r.deviceTypeId && <span className="ml-1 rounded bg-accent-soft px-1 py-px text-[10px] text-accent">将新建</span>}</TD>
+                      <TD className="font-medium">{r.brandId ? '✓' : '—'}</TD>
+                      <TD className="text-muted">{r.model}</TD>
                       <TD className="text-muted">{r.gradeCode || '—'}</TD>
+                      <TD className="text-muted">{r.refPrice || '—'}</TD>
                       <TD className="text-muted">{r.unit || '—'}</TD>
-                      <TD className="max-w-[160px] truncate text-muted">{Object.keys(r.params ?? {}).length ? Object.entries(r.params!).map(([k, v]) => `${k}=${String(v)}`).join(';') : '—'}</TD>
                     </TR>
                   ))}
                 </TBody>

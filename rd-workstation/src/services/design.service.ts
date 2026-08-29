@@ -4,11 +4,12 @@ import type { DesignResult, DeviceSelection, ProductModel, ProjectSystem, Brand 
 import { DesignEngine, SelectionEngine, ValidationEngine } from '../engines'
 import ctx from './ctx'
 import { PointService } from './point.service'
+import { TopologyService } from './topology.service'
 
 /* ---------- 设计链 Service：推导 → 选型 → 结果 ---------- */
 export const DesignService = {
-  /** 跑 DesignEngine，写 design_results + 生成 device_selections（按项目系统档次） */
-  derive(psId: string) {
+  /** 跑 DesignEngine，写 design_results + 生成 device_selections（按项目系统档次 + 可选选型方案） */
+  derive(psId: string, schemeId?: string) {
     const db = repository.db
     const ps = db[T.project_systems].find((r) => (r as ProjectSystem).id === psId) as ProjectSystem | undefined
     const grade = ps?.design_grade ?? 'standard'
@@ -18,13 +19,23 @@ export const DesignService = {
       T.design_results,
       oldResults.filter((r) => (r as DesignResult).project_system_id !== psId).concat(results),
     )
-    const selections = SelectionEngine.deriveSelections(ctx, psId, grade, results)
+    // P5：默认取系统锁定的选型方案；未传则用系统默认方案
+    const effectiveSchemeId = schemeId ?? repository.getById<{ selection_scheme_id?: string }>(T.project_systems, psId)?.selection_scheme_id
+    const selections = SelectionEngine.deriveSelections(ctx, psId, grade, results, effectiveSchemeId)
     const oldSelections = db[T.device_selections] ?? []
     repository.replace(
       T.device_selections,
       oldSelections.filter((r) => (r as DeviceSelection).project_system_id !== psId).concat(selections),
     )
-    return { results, selections }
+    // P6：推导后自动重建/同步拓扑（无节点则生成，有则同步数量、保留手动布局）
+    if (TopologyService.nodes(psId).length) TopologyService.syncFromResults(psId, results)
+    else TopologyService.rebuildFromResults(psId, results)
+    return { results, selections, schemeId: effectiveSchemeId }
+  },
+
+  /** 为项目系统选定选型方案（落库） */
+  setScheme(psId: string, schemeId: string | undefined) {
+    repository.update(T.project_systems, psId, { selection_scheme_id: schemeId, updated_at: new Date().toISOString() })
   },
 
   results(psId: string): DesignResult[] {

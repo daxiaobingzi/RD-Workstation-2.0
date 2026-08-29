@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useDB } from '../../db/memory-db'
 import { T } from '../../types/domain'
 import {
-  ProjectService, SystemService, PointService, DesignService, BillService, BudgetService,
+  ProjectService, PointService, DesignService, BillService, BudgetService,
 } from '../../services'
 import { DataLinkageStrip } from '../../components/data-linkage-strip'
 import { StepRail } from '../../components/ui/tabs'
@@ -13,10 +13,11 @@ import { Select } from '../../components/ui/field'
 import { toast } from '../../components/ui/toast'
 import { cn } from '../../lib/utils'
 import { ConditionStep } from './steps/ConditionStep'
-import { ParamsStep } from './steps/ParamsStep'
 import { PointsStep } from './steps/PointsStep'
 import { DevicesStep } from './steps/DevicesStep'
 import { DeriveStep } from './steps/DeriveStep'
+import { RulesStep } from './steps/RulesStep'
+import { QuantityStep } from './steps/QuantityStep'
 import { TopologyStep } from './steps/TopologyStep'
 import { BillStep } from './steps/BillStep'
 import { BudgetStep } from './steps/BudgetStep'
@@ -27,12 +28,16 @@ import { AIPanel } from './panels/AIPanel'
 import { CheckPanel } from './panels/CheckPanel'
 import { type RightTab } from './system-design.types'
 
+// P3：取消"设计参数"步骤 —— 各系统参数体系尚未建立，
+// 硬编码视频监控参数会让所有系统显示同一表单，误导设计。
+// 推导侧由 DEFAULT_RULES 兜底默认值，后续可改为「系统参数定义表」再恢复。
 const STEPS = [
   { key: 'condition', label: '设计条件' },
-  { key: 'params', label: '设计参数' },
   { key: 'points', label: '点位' },
-  { key: 'devices', label: '设备' },
   { key: 'derive', label: '推导' },
+  { key: 'devices', label: '设备' },
+  { key: 'rules', label: '推导规则' },
+  { key: 'quantity', label: '工程量' },
   { key: 'topology', label: '拓扑' },
   { key: 'bill', label: '清单' },
   { key: 'budget', label: '预算' },
@@ -65,7 +70,6 @@ export function SystemDesignPage() {
   const results = DesignService.results(ps.id)
   const selections = DesignService.selections(ps.id)
   const checks = DesignService.check(ps.id)
-  const params = SystemService.params(ps.id)
   const billVersions = BillService.versions(project.id)
   const lastVersion = billVersions[0]
   const billItems = lastVersion ? BillService.items(lastVersion.id) : []
@@ -73,15 +77,13 @@ export function SystemDesignPage() {
   const budgetTotal = budgets.reduce((s, b) => s + b.total_amount, 0)
 
   const stepDone: Record<string, boolean> = {
-    condition: true,
-    params: params.length > 0,
     points: points.length > 0,
     devices: selections.length > 0,
     derive: results.length > 0,
+    quantity: results.some((r) => r.source_type === 'quota'),
     topology: results.length > 0,
     bill: billItems.length > 0,
     budget: budgetTotal > 0,
-    note: true,
     validate: checks.length > 0,
   }
 
@@ -129,7 +131,7 @@ export function SystemDesignPage() {
       </div>
 
       <div className="border-b border-rule bg-surface px-4 py-2">
-        <DataLinkageStrip psId={ps.id} />
+        <DataLinkageStrip psId={ps.id} projectId={project.id} />
       </div>
 
       {/* 三栏主体 */}
@@ -155,14 +157,15 @@ export function SystemDesignPage() {
         {/* 中：主工作区 */}
         <div className="min-w-0 flex-1 overflow-y-auto p-4">
           {step === 'condition' && <ConditionStep project={project} />}
-          {step === 'params' && <ParamsStep psId={ps.id} params={params} />}
           {step === 'points' && <PointsStep psId={ps.id} points={points} />}
-          {step === 'devices' && <DevicesStep selections={selections} onDerive={derive} />}
+          {step === 'devices' && <DevicesStep psId={ps.id} selections={selections} onDerive={derive} />}
           {step === 'derive' && <DeriveStep psId={ps.id} results={results} onDerive={derive} />}
-          {step === 'topology' && <TopologyStep results={results} selections={selections} />}
+          {step === 'rules' && <RulesStep psId={ps.id} onDerive={derive} />}
+          {step === 'quantity' && <QuantityStep psId={ps.id} results={results} onDerive={derive} />}
+          {step === 'topology' && <TopologyStep psId={ps.id} results={results} />}
           {step === 'bill' && <BillStep billItems={billItems} version={lastVersion} onGenerate={generateBill} />}
           {step === 'budget' && <BudgetStep psId={ps.id} total={budgetTotal} budgets={budgets} lastVersion={lastVersion} onGenerate={generateBudget} />}
-          {step === 'note' && <NoteStep project={project} system={system} />}
+          {step === 'note' && <NoteStep projectId={project.id} psId={ps.id} project={project} system={system} />}
           {step === 'validate' && <ValidateStep checks={checks} />}
         </div>
 
@@ -188,8 +191,8 @@ export function SystemDesignPage() {
             ))}
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto p-3">
-            {rightTab === 'attr' && <AttrPanel params={params} selections={selections} />}
-            {rightTab === 'ai' && <AIPanel checks={checks} params={params} onGoto={setStep} />}
+            {rightTab === 'attr' && <AttrPanel selections={selections} />}
+            {rightTab === 'ai' && <AIPanel checks={checks} onGoto={setStep} />}
             {rightTab === 'check' && <CheckPanel checks={checks} />}
           </div>
         </div>

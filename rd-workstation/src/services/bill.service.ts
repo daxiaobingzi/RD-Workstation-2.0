@@ -18,15 +18,22 @@ export const BillService = {
       .sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''))
   },
   items(billVersionId: string): BillItem[] {
-    return repository.where<BillItem>(T.bill_items, (r) => r.bill_version_id === billVersionId)
+    return repository
+      .where<BillItem>(T.bill_items, (r) => r.bill_version_id === billVersionId)
+      .sort((a, b) => (a.sort_order ?? 9999) - (b.sort_order ?? 9999))
   },
-  /** 手工调整清单项（数量 / 单价等），自动重算金额 */
-  updateItem(id: string, patch: Pick<BillItem, 'quantity' | 'unit_price'>) {
+  /** 手工调整清单项（数量 / 单价 / 排序），自动重算金额 */
+  updateItem(id: string, patch: Partial<Pick<BillItem, 'quantity' | 'unit_price' | 'sort_order'>>) {
     const it = repository.getById<BillItem>(T.bill_items, id)
     if (!it) return
     const quantity = patch.quantity ?? it.quantity
     const unitPrice = patch.unit_price ?? it.unit_price
-    repository.update(T.bill_items, id, { quantity, unit_price: unitPrice, amount: quantity * unitPrice })
+    repository.update(T.bill_items, id, {
+      quantity,
+      unit_price: unitPrice,
+      amount: quantity * unitPrice,
+      ...(patch.sort_order != null ? { sort_order: patch.sort_order } : {}),
+    })
   },
   /** 按类别汇总（供分类小计） */
   summary(billVersionId: string): { category: string; count: number; quantity: number; amount: number }[] {

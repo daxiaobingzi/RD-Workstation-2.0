@@ -1,14 +1,16 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Target, ListTodo, CalendarClock, TrendingUp, CheckCircle2, Sparkles, ArrowRight, Repeat,
+  Target, ListTodo, CalendarClock, TrendingUp, CheckCircle2, Sparkles, ArrowRight, Repeat, Plus, Pencil,
 } from 'lucide-react'
 import { useDB } from '../../db/memory-db'
-import { T } from '../../types/domain'
-import { TaskService, ScheduleService, DesignService, ProjectService } from '../../services'
+import { T, type Task } from '../../types/domain'
+import { TaskService, ScheduleService, DesignService, ProjectService, GoalService } from '../../services'
 import { StatusBadge } from '../../components/ui/badge'
 import { Progress } from '../../components/ui/progress'
-import { cn } from '../../lib/utils'
+import { Button } from '../../components/ui/button'
+import { TaskFormModal } from '../tasks/TaskFormModal'
+import { cn, todayISO } from '../../lib/utils'
 
 const PRIORITY_DOT: Record<string, string> = {
   high: 'bg-danger',
@@ -18,8 +20,11 @@ const PRIORITY_DOT: Record<string, string> = {
 }
 
 export function TodayPage() {
-  useDB((s) => s.db)
+  const db = useDB((s) => s.db)
   const navigate = useNavigate()
+  const [taskModalOpen, setTaskModalOpen] = useState(false)
+  const [editTask, setEditTask] = useState<Task | null>(null)
+  const todayStr = todayISO()
   const today = useMemo(() => {
     const now = new Date()
     return {
@@ -30,19 +35,32 @@ export function TodayPage() {
 
   const tasks = TaskService.list()
   const openTasks = tasks.filter((t) => t.status !== 'done')
-  const todayTasks = openTasks.filter((t) => (t.due_at ?? '').slice(0, 10) === '2026-08-27')
-  const schedules = ScheduleService.list('2026-08-27')
-  const projects = ProjectService.list()
+  const todayTasks = openTasks.filter((t) => (t.due_at ?? '').slice(0, 10) === todayStr)
+  const schedules = ScheduleService.list(todayStr)
+  // db 仅作订阅触发（useDB 变化时重算），引用稳定供下级 useMemo 复用
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const projects = useMemo(() => ProjectService.list(), [db])
+  const projName = useMemo(() => new Map(projects.map((p) => [p.id, p.name])), [projects])
   const projectProgress = projects.map((p) => {
     const pss = ProjectService.systems(p.id)
     const avg = pss.length ? Math.round(pss.reduce((s, x) => s + x.progress, 0) / pss.length) : 0
     return { project: p, progress: avg }
   })
-  const goals = useDB.getState().getTable<{ id: string; name: string; target_value?: number; current_value?: number; period_type: string }>(T.goals)
+  const goals = useDB.getState().getTable<{ id: string; name: string; target_value?: number; current_value?: number; period_type: string; status?: string }>(T.goals)
+  const activeGoals = goals.filter((g) => g.status !== 'archived').slice(0, 3)
   const habits = useDB.getState().getTable<{ id: string; name: string }>(T.habits)
   const habitRecords = useDB.getState().getTable<{ habit_id: string; date: string; completed: boolean }>(T.habit_records)
-  const vssChecks = DesignService.check('ps_vss_001')
-  const aiWarnings = vssChecks.filter((c) => c.severity !== 'ok')
+  // AI 建议聚合所有项目 × 所有系统的校核告警（原仅取第一个项目的第一个系统）
+  const aiWarnings = useMemo<{ severity: string; message: string; projectId: string; psId: string; systemName: string }[]>(() => {
+    const out: { severity: string; message: string; projectId: string; psId: string; systemName: string }[] = []
+    for (const p of projects) {
+      for (const ps of ProjectService.systems(p.id)) {
+        const checks = DesignService.check(ps.id).filter((c) => c.severity !== 'ok')
+        for (const c of checks) out.push({ severity: c.severity, message: c.message, projectId: p.id, psId: ps.id, systemName: ps.systemName })
+      }
+    }
+    return out
+  }, [projects])
 
   return (
     <div className="mx-auto max-w-[1080px] space-y-4 p-5">
@@ -59,22 +77,35 @@ export function TodayPage() {
         </div>
       </div>
 
-      {/* 今日重点 */}
-      <div className="rounded-lg border border-accent/30 bg-gradient-to-r from-accent-soft to-accent2-soft px-4 py-3">
-        <div className="flex items-center gap-2 text-[12px] font-semibold text-accent">
-          <Target className="size-3.5" /> 今日重点
-        </div>
-        <div className="mt-1.5 flex items-center justify-between gap-3">
-          <p className="text-[14px] font-medium text-ink">完成「苏州公安 · 视频监控」设计初稿（点位 / 设备 / 清单 / 预算全链落库）</p>
-          <button
-            type="button"
-            onClick={() => navigate('/projects/proj_001/systems/ps_vss_001')}
-            className="flex shrink-0 items-center gap-1 rounded-[6px] bg-accent px-2.5 py-1.5 text-[12px] font-medium text-white hover:bg-accent-strong"
-          >
-            进入工作区 <ArrowRight className="size-3.5" />
-          </button>
-        </div>
-      </div>
+      {/* 今日重点：动态取进行中项目的第一个子系统（去硬编码 demo id/文案） */}
+      {(() => {
+        const active = projects.find((p) => p.status === 'designing' || p.status === 'reviewing') ?? projects[0]
+        if (!active) return null
+        const pss = ProjectService.systems(active.id)
+        return (
+          <div className="rounded-lg border border-accent/30 bg-gradient-to-r from-accent-soft to-accent2-soft px-4 py-3">
+            <div className="flex items-center gap-2 text-[12px] font-semibold text-accent">
+              <Target className="size-3.5" /> 今日重点
+            </div>
+            <div className="mt-1.5 flex items-center justify-between gap-3">
+              <p className="text-[14px] font-medium text-ink">
+                {pss.length
+                  ? `推进「${active.name} · ${pss[0].systemName}」设计（点位 / 设备 / 清单 / 预算全链落库）`
+                  : `推进「${active.name}」：添加子系统完成设计初稿`}
+              </p>
+              {pss.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => navigate(`/projects/${active.id}/systems/${pss[0].id}`)}
+                  className="flex shrink-0 items-center gap-1 rounded-[6px] bg-accent px-2.5 py-1.5 text-[12px] font-medium text-white hover:bg-accent-strong"
+                >
+                  进入工作区 <ArrowRight className="size-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+        )
+      })()}
 
       {/* 三栏主体 */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-12">
@@ -87,8 +118,8 @@ export function TodayPage() {
                   <span className="absolute -left-[21.5px] top-1 size-2 rounded-full border-2 border-accent bg-surface" />
                   <p className="text-[12.5px] font-medium text-ink">{s.title}</p>
                   <p className="font-mono text-[11px] text-muted">
-                    {s.start_at.slice(11, 16)}
-                    {s.end_at ? `–${s.end_at.slice(11, 16)}` : ''}
+                    {new Date(s.start_at).toTimeString().slice(0, 5)}
+                    {s.end_at ? `–${new Date(s.end_at).toTimeString().slice(0, 5)}` : ''}
                     {s.location ? ` · ${s.location}` : ''}
                   </p>
                 </li>
@@ -102,7 +133,16 @@ export function TodayPage() {
 
         {/* 中：待办收件箱 */}
         <section className="md:col-span-5">
-          <PanelCard icon={<ListTodo className="size-4" />} title="今日待办" count={todayTasks.length}>
+          <PanelCard
+            icon={<ListTodo className="size-4" />}
+            title="今日待办"
+            count={todayTasks.length}
+            extra={
+              <Button size="xs" variant="outline" onClick={() => setTaskModalOpen(true)}>
+                <Plus className="size-3.5" />新建任务
+              </Button>
+            }
+          >
             <ul className="space-y-1">
               {todayTasks.map((t) => (
                 <li key={t.id} className="flex items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-hover">
@@ -117,6 +157,12 @@ export function TodayPage() {
                   <span className={cn('flex-1 text-[13px]', t.status === 'done' ? 'text-faint line-through' : 'text-ink')}>
                     {t.title}
                   </span>
+                  <span
+                    title={t.project_id ? '所属项目' : '未关联任何项目'}
+                    className={cn('shrink-0 text-[10px]', t.project_id ? 'text-faint' : 'text-faint/70')}
+                  >
+                    {t.project_id ? projName.get(t.project_id) : '未关联项目'}
+                  </span>
                   <span className={cn('size-1.5 rounded-full', PRIORITY_DOT[t.priority] ?? 'bg-faint')} />
                 </li>
               ))}
@@ -127,11 +173,23 @@ export function TodayPage() {
             <div className="mt-3 border-t border-rule pt-2.5">
               <p className="mb-1.5 text-[11px] font-semibold tracking-wide text-muted uppercase">更多未完成任务</p>
               <ul className="space-y-1">
-                {openTasks.filter((t) => (t.due_at ?? '').slice(0, 10) !== '2026-08-27').slice(0, 3).map((t) => (
-                  <li key={t.id} className="flex items-center gap-2 px-2 py-1 text-[12.5px] text-muted">
+                {openTasks.filter((t) => (t.due_at ?? '').slice(0, 10) !== todayStr).slice(0, 3).map((t) => (
+                  <li
+                    key={t.id}
+                    onClick={() => setEditTask(t)}
+                    title="点击编辑该任务（与项目任务 / 目标关联同一数据源）"
+                    className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-[12.5px] text-muted hover:bg-hover"
+                  >
                     <span className={cn('size-1.5 shrink-0 rounded-full', PRIORITY_DOT[t.priority] ?? 'bg-faint')} />
                     <span className="flex-1 truncate">{t.title}</span>
+                    <span
+                      title={t.project_id ? '所属项目' : '未关联任何项目'}
+                      className={cn('shrink-0 text-[10px]', t.project_id ? 'text-faint' : 'text-faint/70')}
+                    >
+                      {t.project_id ? projName.get(t.project_id) : '未关联项目'}
+                    </span>
                     {t.due_at && <span className="font-mono text-[10.5px] text-faint">{t.due_at.slice(5, 10)}</span>}
+                    <Pencil className="size-3 shrink-0 text-faint opacity-0 transition-opacity group-hover:opacity-100 hover:opacity-100" />
                   </li>
                 ))}
               </ul>
@@ -161,23 +219,38 @@ export function TodayPage() {
             </ul>
           </PanelCard>
 
-          <PanelCard icon={<Target className="size-4" />} title="目标进度" count={goals.length}>
+          <PanelCard icon={<Target className="size-4" />} title="目标进度" count={activeGoals.length}>
             <ul className="space-y-2.5">
-              {goals.slice(0, 2).map((g) => {
-                const pct = g.target_value ? Math.round(((g.current_value ?? 0) / g.target_value) * 100) : 0
+              {activeGoals.map((g) => {
+                const prog = GoalService.progress(g.id)
                 return (
                   <li key={g.id}>
                     <div className="mb-1 flex items-center justify-between">
-                      <span className="text-[12.5px] text-ink">{g.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => navigate('/goals')}
+                        className="max-w-[70%] truncate text-[12.5px] text-ink hover:text-accent"
+                      >
+                        {g.name}
+                      </button>
                       <span className="font-mono text-[11px] text-muted">
-                        {g.current_value}/{g.target_value}
+                        {prog.value}/{prog.target}
                       </span>
                     </div>
-                    <Progress value={pct} tone="accent2" />
+                    <Progress value={prog.pct} tone="accent2" />
                   </li>
                 )
               })}
             </ul>
+            {activeGoals.length > 0 && (
+              <button
+                type="button"
+                onClick={() => navigate('/goals')}
+                className="mt-2.5 w-full rounded-md border border-rule py-1 text-[12px] font-medium text-muted hover:bg-hover hover:text-ink"
+              >
+                查看全部目标
+              </button>
+            )}
           </PanelCard>
         </section>
       </div>
@@ -188,7 +261,7 @@ export function TodayPage() {
           <PanelCard icon={<Repeat className="size-4" />} title="习惯打卡" count={habits.length}>
             <div className="flex flex-wrap gap-2">
               {habits.map((h) => {
-                const done = habitRecords.some((r) => r.habit_id === h.id && r.date === '2026-08-27' && r.completed)
+                const done = habitRecords.some((r) => r.habit_id === h.id && r.date === todayStr && r.completed)
                 return (
                   <span
                     key={h.id}
@@ -208,42 +281,62 @@ export function TodayPage() {
         <section className="md:col-span-7">
           <PanelCard icon={<Sparkles className="size-4" />} title="AI 建议" badge="今日简报">
             {aiWarnings.length ? (
-              <ul className="space-y-1.5">
-                {aiWarnings.map((w, i) => (
-                  <li key={i} className="flex items-start gap-2 rounded-md bg-surface-subtle px-2.5 py-1.5 text-[12.5px] text-muted">
-                    <span className={cn('mt-1 size-1.5 shrink-0 rounded-full', w.severity === 'danger' ? 'bg-danger' : 'bg-warn')} />
-                    <span>
-                      {w.message}
-                      {w.severity === 'danger' && (
-                        <button
-                          type="button"
-                          className="ml-2 text-[12px] font-medium text-accent hover:underline"
-                          onClick={() => navigate('/projects/proj_001/systems/ps_vss_001')}
-                        >
-                          去处理
-                        </button>
-                      )}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+              <>
+                <ul className="space-y-1.5">
+                  {aiWarnings.slice(0, 6).map((w, i) => (
+                    <li key={`${w.psId}-${i}`} className="flex items-start gap-2 rounded-md bg-surface-subtle px-2.5 py-1.5 text-[12.5px] text-muted">
+                      <span className={cn('mt-1 size-1.5 shrink-0 rounded-full', w.severity === 'danger' ? 'bg-danger' : 'bg-warn')} />
+                      <span>
+                        <span className="font-medium text-ink">[{w.systemName}]</span> {w.message}
+                        {w.severity === 'danger' && (
+                          <button
+                            type="button"
+                            className="ml-2 text-[12px] font-medium text-accent hover:underline"
+                            onClick={() => navigate(`/projects/${w.projectId}/systems/${w.psId}`)}
+                          >
+                            去处理
+                          </button>
+                        )}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                {aiWarnings.length > 6 && (
+                  <p className="mt-1.5 text-[11.5px] text-faint">另有 {aiWarnings.length - 6} 条告警，请逐系统前往处理。</p>
+                )}
+              </>
             ) : (
               <p className="text-[12.5px] text-muted">设计链状态良好，暂无告警。</p>
             )}
           </PanelCard>
         </section>
       </div>
+
+      {/* 统一任务表单（P1-2）：今日页可新建任务，并支持关联目标（与项目任务/目标页联动）。新建后默认挂到今天。 */}
+      <TaskFormModal
+        key={taskModalOpen ? 'open' : 'closed'}
+        open={taskModalOpen}
+        onClose={() => setTaskModalOpen(false)}
+      />
+      {/* 编辑任务（"更多未完成任务"点击行）——同一 tasks 表，与项目/目标任务同源 */}
+      <TaskFormModal
+        key={editTask ? `edit-${editTask.id}` : 'idle'}
+        open={!!editTask}
+        initial={editTask}
+        onClose={() => setEditTask(null)}
+      />
     </div>
   )
 }
 
 function PanelCard({
-  icon, title, count, badge, children,
+  icon, title, count, badge, extra, children,
 }: {
   icon: React.ReactNode
   title: string
   count?: number
   badge?: string
+  extra?: React.ReactNode
   children: React.ReactNode
 }) {
   return (
@@ -255,6 +348,7 @@ function PanelCard({
           <span className="rounded-full bg-surface-subtle px-1.5 text-[10.5px] text-muted">{count}</span>
         )}
         {badge && <span className="ml-auto text-[11px] text-faint">{badge}</span>}
+        {extra && <span className="ml-auto">{extra}</span>}
       </div>
       <div className="px-3.5 py-3">{children}</div>
     </div>

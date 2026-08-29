@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Search, FolderKanban, LayoutList } from 'lucide-react'
 import { useDB } from '../../db/memory-db'
@@ -11,8 +11,8 @@ import { EmptyState } from '../../components/ui/empty'
 import { Modal } from '../../components/ui/dialog'
 import { Button } from '../../components/ui/button'
 import { Field, Input, Select } from '../../components/ui/field'
-import { Table, THead, TBody, TR, TH, TD, NumCell } from '../../components/ui/table'
 import { PageHeader } from '../../components/ui/page-header'
+import { SortableTable, type SortableColumn } from '../../components/ui/sortable-table'
 import { toast } from '../../components/ui/toast'
 import { fmtNum } from '../../lib/utils'
 
@@ -38,10 +38,33 @@ export function ProjectsPage() {
     return all.filter((p) => [p.name, p.project_code, p.client_name, p.project_type].some((v) => v?.toLowerCase().includes(kw)))
   }, [q, useDB.getState().db])
 
+  // 行拖拽排序：本地视图 + sort_order 持久化（刷新保持）
+  const [rows, setRows] = useState<Project[]>(projects)
+  useEffect(() => { setRows(projects) }, [projects])
+  const reorder = (from: number, to: number) => {
+    if (from === to) return
+    const next = [...rows]
+    const [mv] = next.splice(from, 1)
+    next.splice(to, 0, mv)
+    setRows(next)
+    next.forEach((p, i) => { if (p.sort_order !== i) ProjectService.update(p.id, { sort_order: i }) })
+  }
+
   const progressOf = (id: string) => {
     const pss = ProjectService.systems(id)
     return pss.length ? Math.round(pss.reduce((s, x) => s + x.progress, 0) / pss.length) : 0
   }
+
+  const columns = useMemo<SortableColumn<Project>[]>(() => [
+    { key: 'project_code', title: '项目编号', width: 128, render: (p) => <span className="font-mono text-[12px] text-accent">{p.project_code}</span> },
+    { key: 'name', title: '名称', width: 300, minWidth: 200, render: (p) => (
+        <button type="button" className="cursor-pointer text-left text-[13px] font-medium hover:text-accent" onClick={() => navigate(`/projects/${p.id}`)} title="打开项目">{p.name}</button>) },
+    { key: 'project_type', title: '类型', width: 150, render: (p) => <span className="text-muted">{p.project_type}</span> },
+    { key: 'client_name', title: '业主', width: 170, render: (p) => <span className="text-muted">{p.client_name ?? '—'}</span> },
+    { key: 'progress', title: '进度', width: 160, render: (p) => <div className="w-36"><Progress value={progressOf(p.id)} showLabel /></div> },
+    { key: 'status', title: '状态', width: 92, render: (p) => <StatusBadge status={p.status} /> },
+    { key: 'updated_at', title: '更新时间', width: 108, render: (p) => <span className="font-mono text-[12px] text-faint">{p.updated_at.slice(5, 10)}</span> },
+  ], [navigate, progressOf])
 
   const createProject = () => {
     if (!form.name) {
@@ -91,26 +114,13 @@ export function ProjectsPage() {
         </div>
       ) : view === 'list' ? (
         <div className="rounded-lg border border-rule bg-surface">
-          <Table>
-            <THead>
-              <TR>
-                <TH>项目编号</TH><TH>名称</TH><TH>类型</TH><TH>业主</TH><TH>进度</TH><TH>状态</TH><TH>更新时间</TH>
-              </TR>
-            </THead>
-            <TBody>
-              {projects.map((p) => (
-                <TR key={p.id} className="cursor-pointer hover:bg-hover" onClick={() => navigate(`/projects/${p.id}`)}>
-                  <TD><NumCell>{p.project_code}</NumCell></TD>
-                  <TD className="font-medium">{p.name}</TD>
-                  <TD className="text-muted">{p.project_type}</TD>
-                  <TD className="text-muted">{p.client_name}</TD>
-                  <TD><div className="w-36"><Progress value={progressOf(p.id)} showLabel /></div></TD>
-                  <TD><StatusBadge status={p.status} /></TD>
-                  <TD className="font-mono text-[12px] text-faint">{p.updated_at.slice(5, 10)}</TD>
-                </TR>
-              ))}
-            </TBody>
-          </Table>
+          <SortableTable<Project>
+            columns={columns}
+            rows={rows}
+            rowKey={(p) => p.id}
+            storageKey="projects"
+            onReorder={reorder}
+          />
         </div>
       ) : (
         <div className="grid grid-cols-4 gap-4">

@@ -1,28 +1,27 @@
 import { useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
-import { ClipboardPaste, FileSpreadsheet, Download, UploadCloud, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react'
+import { ClipboardPaste, FileSpreadsheet, Download, UploadCloud, AlertTriangle, CheckCircle2, XCircle, Building2 } from 'lucide-react'
 import { parsePointRows, PointService, type ImportPointRow } from '../../../services'
-import type { PointCategory } from '../../../types/domain'
+import { DeviceProductOptions } from '../../../services/device.catalog'
 import { Modal } from '../../../components/ui/dialog'
 import { Button } from '../../../components/ui/button'
 import { Textarea, Field } from '../../../components/ui/field'
 import { Segmented } from '../../../components/ui/segmented'
 import { Table, THead, TBody, TR, TH, TD, NumCell } from '../../../components/ui/table'
 import { toast } from '../../../components/ui/toast'
-import { fmtNum, cn } from '../../../lib/utils'
+import { fmtNum } from '../../../lib/utils'
 
-/** 点位批量导入：粘贴 CSV/TSV 或上传 Excel。解析 → 预览校验 → 写入。 */
+/** 点位批量导入（P3 重构）：上传 Excel（xlsx/xls） 或 粘贴表格文本（不再区分 CSV，
+ *  与点位录入表同列结构：设备名称,建筑,弱电间,数量）。缺失的结构自动建档。 */
 export function PointImportDialog({
   open,
   onClose,
   psId,
-  categories,
   onImported,
 }: {
   open: boolean
   onClose: () => void
   psId: string
-  categories: PointCategory[]
   onImported: (count: number) => void
 }) {
   const [mode, setMode] = useState<'paste' | 'file'>('paste')
@@ -30,6 +29,9 @@ export function PointImportDialog({
   const [rows, setRows] = useState<{ parsed: ImportPointRow[]; errors: { line: number; message: string }[]; source: string } | null>(null)
   const [imported, setImported] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+
+  const projectId = PointService.projectIdOf(psId)
+  const deviceOptions = DeviceProductOptions.list()
 
   const parseText = () => {
     const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
@@ -40,36 +42,40 @@ export function PointImportDialog({
       const sep = hasTab ? '\t' : hasSemi ? /[;；]/ : hasComma ? ',' : null
       return sep === null ? [l] : l.split(sep).map((c) => c.trim())
     })
-    const r = parsePointRows(matrix, categories)
+    const r = parsePointRows(matrix, { deviceOptions, projectId })
     setRows({ parsed: r.rows, errors: r.errors, source: 'paste' })
     setImported(false)
   }
 
   const onFile = async (file: File) => {
+    const isExcel = /\.(xlsx|xls)$/i.test(file.name)
+    if (!isExcel) {
+      toast('仅支持 Excel 文件（.xlsx / .xls），CSV 已停用', 'warn')
+      return
+    }
     try {
       const buf = await file.arrayBuffer()
       const wb = XLSX.read(buf)
       const ws = wb.Sheets[wb.SheetNames[0]]
       const matrix = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: '' }).map((r) => r.map((c) => String(c)))
-      const r = parsePointRows(matrix as (string | number)[][], categories)
+      const r = parsePointRows(matrix as (string | number)[][], { deviceOptions, projectId })
       setRows({ parsed: r.rows, errors: r.errors, source: file.name })
       setImported(false)
     } catch {
-      toast('文件解析失败，请使用 CSV 或 Excel（xlsx/xls）', 'error')
+      toast('文件解析失败，请使用 Excel（xlsx / xls）', 'error')
     }
   }
 
   const doImport = () => {
     if (!rows || !rows.parsed.length) return
-    const created = PointService.addMany(psId, rows.parsed)
+    const { created, errors } = PointService.importRows(psId, rows.parsed)
     setImported(true)
     onImported(created.length)
-    toast(`成功导入 ${created.length} 条点位${rows.errors.length ? `，跳过 ${rows.errors.length} 条问题行` : ''}`)
+    toast(`成功导入 ${created.length} 条点位${rows.errors.length + errors.length ? `，跳过 ${rows.errors.length + errors.length} 条问题行` : ''}`)
     setRows(null)
   }
 
   const totalQty = rows ? rows.parsed.reduce((s, r) => s + r.quantity, 0) : 0
-  const catName = (id?: string, raw?: string) => categories.find((c) => c.id === id)?.name ?? raw ?? '未分类'
 
   const downloadTemplate = () => {
     const blob = new Blob(['\uFEFF' + PointService.importTemplate()], { type: 'text/csv;charset=utf-8' })
@@ -87,7 +93,7 @@ export function PointImportDialog({
         <div className="flex items-center justify-between">
           <Segmented
             options={[
-              { value: 'paste', label: '粘贴 CSV / 表格' },
+              { value: 'paste', label: '粘贴表格' },
               { value: 'file', label: '上传 Excel' },
             ]}
             value={mode}
@@ -99,12 +105,12 @@ export function PointImportDialog({
         </div>
 
         {mode === 'paste' ? (
-          <Field label="粘贴内容（表头：点位名称,类别,楼层,位置,数量,备注；支持 Tab/分号分隔）">
+          <Field label="粘贴内容（与录入表同列：设备名称,建筑,弱电间,数量；设备名称必须来自设备中心，缺失的建筑/弱电间将自动创建）">
             <Textarea
               className="h-44 font-mono text-[12px]"
               value={text}
               onChange={(e) => { setText(e.target.value); setRows(null); setImported(false) }}
-              placeholder={'大厅高清枪机,室内摄像机,1F,大堂,12\n走廊半球,室内摄像机,2F,走廊,8'}
+              placeholder={'红外半球摄像机,A栋,1F-IDF,12\n高清枪型摄像机,A栋,,18'}
             />
           </Field>
         ) : (
@@ -113,12 +119,12 @@ export function PointImportDialog({
             onClick={() => fileRef.current?.click()}
           >
             <FileSpreadsheet className="size-7 text-accent2" />
-            <p className="text-[13px] font-medium">点击选择 Excel / CSV 文件</p>
-            <p className="text-[11.5px] text-faint">读取第一个工作表，首行可为表头</p>
+            <p className="text-[13px] font-medium">点击选择 Excel 文件（.xlsx / .xls）</p>
+            <p className="text-[11.5px] text-faint">读取第一个工作表，首行可为表头：设备名称,建筑,弱电间,数量 · CSV 已停用</p>
             <input
               ref={fileRef}
               type="file"
-              accept=".csv,.xls,.xlsx"
+              accept=".xls,.xlsx"
               className="hidden"
               onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); e.currentTarget.value = '' }}
             />
@@ -149,14 +155,13 @@ export function PointImportDialog({
             </p>
             <div className="max-h-56 overflow-auto rounded-md border border-rule">
               <Table>
-                <THead><TR><TH>名称</TH><TH>类别</TH><TH>楼层</TH><TH>位置</TH><TH>数量</TH></TR></THead>
+                <THead><TR><TH>设备名称</TH><TH>建筑</TH><TH>弱电间</TH><TH>数量</TH></TR></THead>
                 <TBody>
                   {rows.parsed.slice(0, 50).map((r, i) => (
                     <TR key={i}>
-                      <TD className="font-medium">{r.point_name}</TD>
-                      <TD className={cn('text-muted', !r.category_id && 'text-warn')}>{catName(r.category_id, r.category_name)}</TD>
-                      <TD className="text-muted">{r.floor || '—'}</TD>
-                      <TD className="text-muted">{r.space || '—'}</TD>
+                      <TD className="font-medium">{r.device_name}</TD>
+                      <TD className="flex items-center gap-1 text-muted"><Building2 className="size-3 text-faint" />{r.building_name || '—'}</TD>
+                      <TD className="text-muted">{r.telecom_room_name || '—'}</TD>
                       <TD><NumCell>{fmtNum(r.quantity)}</NumCell></TD>
                     </TR>
                   ))}
