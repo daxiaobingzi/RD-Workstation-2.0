@@ -1,10 +1,9 @@
 import { create } from 'zustand'
-import type { TableMap, TableName } from '../types/table-map'
+import type { DB, TableMap, TableName } from '../types/table-map'
 import type { Repository } from '../repositories/repository'
 
 /** 数据库表集合：冻结 Schema 的可选表映射。Web 先行阶段以内存对象承载，localStorage 持久化；
  *  后续 SQLite/Drizzle 落地时，把本层替换为 Repository 实现即可，上层不变。 */
-export type DB = Partial<{ [K in TableName]: TableMap[K][] }>
 
 type PersistenceStatus = 'idle' | 'saved' | 'error'
 
@@ -51,153 +50,87 @@ function persist(db: DB): boolean {
   }
 }
 
-function persistenceResult(ok: boolean) {
-  return ok
-    ? {
-        persistenceStatus: 'saved' as const,
-        persistenceError: null,
-        lastPersistedAt: Date.now(),
-      }
-    : {
-        persistenceStatus: 'error' as const,
-        persistenceError: '本地数据保存失败，请及时导出备份。',
-        lastPersistedAt: null,
-      }
+function cloneDB(db: DB): DB {
+  return structuredClone(db)
 }
 
-function createRepository(db: DB, commit: (next: DB) => void): Repository {
-  const api: Repository = {
-    get db() {
-      return db
+let repositoryRef: Repository | null = null
+
+export const useDB = create<DBState>((set, get) => {
+  const state = {
+    db: {},
+    ready: false,
+    persistenceStatus: 'idle' as PersistenceStatus,
+    persistenceError: null as string | null,
+    lastPersistedAt: null as number | null,
+    init: (seed: () => DB) => {
+      const existing = loadPersisted()
+      const db = existing ?? seed()
+      const now = Date.now()
+      set({ db, ready: true, persistenceStatus: existing ? 'saved' : 'idle', persistenceError: null, lastPersistedAt: existing ? now : null })
     },
-    getTable: (t) => db[t] ?? [],
-    getById: (t, id) => db[t]?.find((r) => r.id === id),
-    where: (t, pred) => (db[t] ?? []).filter(pred),
-    insert: (t, row) => {
-      db[t] = [...(db[t] ?? []), row] as never
-      commit(db)
+    getTable: <K extends TableName>(t: K) => get().db[t] ?? [],
+    getById: <K extends TableName>(t: K, id: string) => get().db[t]?.find((row) => row.id === id),
+    where: <K extends TableName>(t: K, pred: (row: TableMap[K]) => boolean) => (get().db[t] ?? []).filter(pred),
+    insert: <K extends TableName>(t: K, row: TableMap[K]) => {
+      const db = get().db
+      const rows = [...(db[t] ?? []), row]
+      const next = { ...db, [t]: rows } as DB
+      const saved = persist(next)
+      set({ db: next, persistenceStatus: saved ? 'saved' : 'error', persistenceError: saved ? null : '本地数据保存失败，请及时导出备份', lastPersistedAt: saved ? Date.now() : get().lastPersistedAt })
     },
-    insertMany: (t, rows) => {
-      db[t] = [...(db[t] ?? []), ...rows] as never
-      commit(db)
+    insertMany: <K extends TableName>(t: K, rows: TableMap[K][]) => {
+      const db = get().db
+      const next = { ...db, [t]: [...(db[t] ?? []), ...rows] } as DB
+      const saved = persist(next)
+      set({ db: next, persistenceStatus: saved ? 'saved' : 'error', persistenceError: saved ? null : '本地数据保存失败，请及时导出备份', lastPersistedAt: saved ? Date.now() : get().lastPersistedAt })
     },
-    update: (t, id, patch) => {
-      db[t] = (db[t] ?? []).map((r) => (r.id === id ? { ...r, ...patch, id } : r)) as never
-      commit(db)
+    update: <K extends TableName>(t: K, id: string, patch: Partial<TableMap[K]>) => {
+      const db = get().db
+      const rows = (db[t] ?? []).map((row) => row.id === id ? { ...row, ...patch } : row) as TableMap[K][]
+      const next = { ...db, [t]: rows } as DB
+      const saved = persist(next)
+      set({ db: next, persistenceStatus: saved ? 'saved' : 'error', persistenceError: saved ? null : '本地数据保存失败，请及时导出备份', lastPersistedAt: saved ? Date.now() : get().lastPersistedAt })
     },
-    remove: (t, id) => {
-      db[t] = (db[t] ?? []).filter((r) => r.id !== id) as never
-      commit(db)
+    remove: <K extends TableName>(t: K, id: string) => {
+      const db = get().db
+      const next = { ...db, [t]: (db[t] ?? []).filter((row) => row.id !== id) } as DB
+      const saved = persist(next)
+      set({ db: next, persistenceStatus: saved ? 'saved' : 'error', persistenceError: saved ? null : '本地数据保存失败，请及时导出备份', lastPersistedAt: saved ? Date.now() : get().lastPersistedAt })
     },
-    removeMany: (t, pred) => {
-      db[t] = (db[t] ?? []).filter((r) => !pred(r)) as never
-      commit(db)
+    removeMany: <K extends TableName>(t: K, pred: (row: TableMap[K]) => boolean) => {
+      const db = get().db
+      const next = { ...db, [t]: (db[t] ?? []).filter((row) => !pred(row)) } as DB
+      const saved = persist(next)
+      set({ db: next, persistenceStatus: saved ? 'saved' : 'error', persistenceError: saved ? null : '本地数据保存失败，请及时导出备份', lastPersistedAt: saved ? Date.now() : get().lastPersistedAt })
     },
-    replace: (t, rows) => {
-      db[t] = rows
-      commit(db)
+    replace: <K extends TableName>(t: K, rows: TableMap[K][]) => {
+      const db = get().db
+      const next = { ...db, [t]: rows } as DB
+      const saved = persist(next)
+      set({ db: next, persistenceStatus: saved ? 'saved' : 'error', persistenceError: saved ? null : '本地数据保存失败，请及时导出备份', lastPersistedAt: saved ? Date.now() : get().lastPersistedAt })
     },
-    transaction: (fn) => {
-      const snapshot = structuredClone(db)
-      return fn(createRepository(snapshot, () => undefined))
+    transaction: <T>(fn: (tx: Repository) => T): T => {
+      if (!repositoryRef) throw new Error('Repository 尚未初始化')
+      return repositoryRef.transaction(fn)
+    },
+    reset: () => {
+      const next: DB = {}
+      let saved = true
+      try {
+        localStorage.removeItem(STORAGE_KEY)
+      } catch {
+        saved = false
+      }
+      set({ db: next, ready: false, persistenceStatus: saved ? 'saved' : 'error', persistenceError: saved ? null : '本地数据清理失败，请检查浏览器存储权限', lastPersistedAt: saved ? Date.now() : get().lastPersistedAt })
     },
   }
-  return api
+  return state
+})
+
+export function getDBRepository(): Repository {
+  if (!repositoryRef) {
+    throw new Error('Repository 尚未初始化')
+  }
+  return repositoryRef
 }
-
-export const useDB = create<DBState>((set, get) => ({
-  db: {},
-  ready: false,
-  persistenceStatus: 'idle',
-  persistenceError: null,
-  lastPersistedAt: null,
-
-  init: (seed) => {
-    const existing = loadPersisted()
-    const db = existing ?? seed()
-    const persisted = persist(db)
-    set({ db, ready: true, ...persistenceResult(persisted) })
-  },
-
-  getTable: (t) => get().db[t] ?? [],
-  getById: (t, id) => get().db[t]?.find((r) => r.id === id),
-  where: (t, pred) => (get().db[t] ?? []).filter(pred),
-
-  insert: (t, row) =>
-    set((s) => {
-      const db: DB = { ...s.db, [t]: [...(s.db[t] ?? []), row] }
-      return { db, ...persistenceResult(persist(db)) }
-    }),
-
-  insertMany: (t, rows) =>
-    set((s) => {
-      const db: DB = { ...s.db, [t]: [...(s.db[t] ?? []), ...rows] }
-      return { db, ...persistenceResult(persist(db)) }
-    }),
-
-  update: (t, id, patch) =>
-    set((s) => {
-      const db: DB = {
-        ...s.db,
-        [t]: (s.db[t] ?? []).map((r) => (r.id === id ? { ...r, ...patch, id } : r)),
-      }
-      return { db, ...persistenceResult(persist(db)) }
-    }),
-
-  remove: (t, id) =>
-    set((s) => {
-      const db: DB = { ...s.db, [t]: (s.db[t] ?? []).filter((r) => r.id !== id) }
-      return { db, ...persistenceResult(persist(db)) }
-    }),
-
-  removeMany: (t, pred) =>
-    set((s) => {
-      const db: DB = { ...s.db, [t]: (s.db[t] ?? []).filter((r) => !pred(r)) }
-      return { db, ...persistenceResult(persist(db)) }
-    }),
-
-  replace: (t, rows) =>
-    set((s) => {
-      const db: DB = { ...s.db, [t]: rows }
-      return { db, ...persistenceResult(persist(db)) }
-    }),
-
-  transaction: (fn) => {
-    const current = get().db
-    const draft = structuredClone(current)
-    const tx = createRepository(draft, () => undefined)
-    const result = fn(tx)
-    const persisted = persist(draft)
-    if (!persisted) {
-      throw new Error('本地数据保存失败，事务未提交。')
-    }
-    set({ db: draft, ...persistenceResult(true) })
-    return result
-  },
-
-  reset: () => {
-    try {
-      localStorage.removeItem(STORAGE_KEY)
-      set({ db: {}, ready: false, persistenceStatus: 'saved', persistenceError: null, lastPersistedAt: Date.now() })
-    } catch {
-      set({ db: {}, ready: false, persistenceStatus: 'error', persistenceError: '本地数据清理失败，请检查浏览器存储权限。', lastPersistedAt: null })
-    }
-  },
-}))
-
-export class MemoryRepository implements Repository {
-  get db(): DB { return useDB.getState().db }
-  getTable<K extends TableName>(t: K): TableMap[K][] { return useDB.getState().getTable(t) }
-  getById<K extends TableName>(t: K, id: string): TableMap[K] | undefined { return useDB.getState().getById(t, id) }
-  where<K extends TableName>(t: K, pred: (row: TableMap[K]) => boolean): TableMap[K][] { return useDB.getState().where(t, pred) }
-  insert<K extends TableName>(t: K, row: TableMap[K]): void { useDB.getState().insert(t, row) }
-  insertMany<K extends TableName>(t: K, rows: TableMap[K][]): void { useDB.getState().insertMany(t, rows) }
-  update<K extends TableName>(t: K, id: string, patch: Partial<TableMap[K]>): void { useDB.getState().update(t, id, patch) }
-  remove<K extends TableName>(t: K, id: string): void { useDB.getState().remove(t, id) }
-  removeMany<K extends TableName>(t: K, pred: (row: TableMap[K]) => boolean): void { useDB.getState().removeMany(t, pred) }
-  replace<K extends TableName>(t: K, rows: TableMap[K][]): void { useDB.getState().replace(t, rows) }
-  transaction<T>(fn: (tx: Repository) => T): T { return useDB.getState().transaction(fn) }
-}
-
-/** 组合根单例：Service 经它访问数据，类型为 Repository 接口 */
-export const repository: Repository = new MemoryRepository()
