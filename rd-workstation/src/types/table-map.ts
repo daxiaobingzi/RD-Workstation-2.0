@@ -109,3 +109,8 @@ export interface TableMap {
 
 export type TableName = keyof TableMap
 export type TableRow<K extends TableName> = TableMap[K]
+
+/** 数据库运行时结构。未初始化的表允许暂时不存在。 */
+export type DB = Partial<{
+  [K in TableName]: TableMap[K][]
+}>
