@@ -7,7 +7,7 @@ function nowIso() {
   return new Date().toISOString()
 }
 
-/** 备份表名白名单（T 常量覆盖的业务表） */
+/** 备份表名白名单（T 常量覆盖的表名） */
 const TABLE_NAMES = new Set<string>(Object.values(T))
 function dbTableExists(name: string) {
   return TABLE_NAMES.has(name)
@@ -106,30 +106,32 @@ export const ProjectService = {
     const hasBld = (bldId?: string) => !!bldId && bldIds.has(bldId)
     const hasRoom = (roomId?: string) => !!roomId && roomIds.has(roomId)
 
-    // 项目本身
-    repository.remove(T.projects, id)
-    // 项目系统/空间结构
-    repository.removeMany(T.project_systems, (r) => (r as ProjectSystem).project_id === id)
-    repository.removeMany(T.buildings, (r) => (r as Building).project_id === id)
-    repository.removeMany(T.telecom_rooms, (r) => hasBld((r as TelecomRoom).building_id))
-    // 设计域（按系统/建筑/弱电间归属）
-    repository.removeMany(T.design_parameters, (r) => hasPs((r as { project_system_id?: string }).project_system_id))
-    repository.removeMany(T.points, (r) => hasPs((r as { project_system_id?: string }).project_system_id) || hasRoom((r as { telecom_room_id?: string }).telecom_room_id))
-    repository.removeMany(T.design_results, (r) => hasPs((r as { project_system_id?: string }).project_system_id))
-    repository.removeMany(T.device_selections, (r) => hasPs((r as { project_system_id?: string }).project_system_id))
-    // 任务/日程
-    repository.removeMany(T.tasks, (r) => (r as { project_id?: string }).project_id === id)
-    repository.removeMany(T.schedules, (r) => (r as { project_id?: string }).project_id === id || hasPs((r as { project_system_id?: string }).project_system_id))
-    // 清单/预算
-    repository.removeMany(T.bill_versions, (r) => (r as { project_id?: string }).project_id === id)
-    repository.removeMany(T.bill_items, (r) => billIds.has((r as { bill_version_id?: string }).bill_version_id ?? ''))
-    repository.removeMany(T.budgets, (r) => (r as { project_id?: string }).project_id === id)
-    repository.removeMany(T.budget_items, (r) => budgetIds.has((r as { budget_id?: string }).budget_id ?? ''))
-    // 文档 / 点位快照（revisions）
-    repository.removeMany(T.documents, (r) => (r as { project_id?: string }).project_id === id)
-    repository.removeMany(T.revisions, (r) => {
-      const snap = (r as { snapshot_json?: { project_system_id?: string } }).snapshot_json
-      return (r as { entity_type?: string }).entity_type === 'point' && hasPs(snap?.project_system_id)
+    repository.transaction((tx) => {
+      // 项目本身
+      tx.remove(T.projects, id)
+      // 项目系统/空间结构
+      tx.removeMany(T.project_systems, (r) => (r as ProjectSystem).project_id === id)
+      tx.removeMany(T.buildings, (r) => (r as Building).project_id === id)
+      tx.removeMany(T.telecom_rooms, (r) => hasBld((r as TelecomRoom).building_id))
+      // 设计域（按系统/建筑/弱电间归属）
+      tx.removeMany(T.design_parameters, (r) => hasPs((r as { project_system_id?: string }).project_system_id))
+      tx.removeMany(T.points, (r) => hasPs((r as { project_system_id?: string }).project_system_id) || hasRoom((r as { telecom_room_id?: string }).telecom_room_id))
+      tx.removeMany(T.design_results, (r) => hasPs((r as { project_system_id?: string }).project_system_id))
+      tx.removeMany(T.device_selections, (r) => hasPs((r as { project_system_id?: string }).project_system_id))
+      // 任务/日程
+      tx.removeMany(T.tasks, (r) => (r as { project_id?: string }).project_id === id)
+      tx.removeMany(T.schedules, (r) => (r as { project_id?: string }).project_id === id || hasPs((r as { project_system_id?: string }).project_system_id))
+      // 清单/预算
+      tx.removeMany(T.bill_versions, (r) => (r as { project_id?: string }).project_id === id)
+      tx.removeMany(T.bill_items, (r) => billIds.has((r as { bill_version_id?: string }).bill_version_id ?? ''))
+      tx.removeMany(T.budgets, (r) => (r as { project_id?: string }).project_id === id)
+      tx.removeMany(T.budget_items, (r) => budgetIds.has((r as { budget_id?: string }).budget_id ?? ''))
+      // 文档 / 点位快照（revisions）
+      tx.removeMany(T.documents, (r) => (r as { project_id?: string }).project_id === id)
+      tx.removeMany(T.revisions, (r) => {
+        const snap = (r as { snapshot_json?: { project_system_id?: string } }).snapshot_json
+        return (r as { entity_type?: string }).entity_type === 'point' && hasPs(snap?.project_system_id)
+      })
     })
   },
 
@@ -290,14 +292,20 @@ export const ProjectService = {
     } catch {
       return { ok: false, message: '备份文件无法解析' }
     }
-    for (const [table, rows] of Object.entries(data.tables)) {
-      if (!Array.isArray(rows) || !dbTableExists(table)) continue
-      const existing = new Map(repository.getTable<{ id: string }>(table).map((r) => [r.id, r]))
-      for (const row of rows) {
-        if (!row || typeof row.id !== 'string') continue
-        if (existing.has(row.id)) repository.update(table, row.id, row)
-        else repository.insert(table, row)
-      }
+    try {
+      repository.transaction((tx) => {
+        for (const [table, rows] of Object.entries(data.tables)) {
+          if (!Array.isArray(rows) || !dbTableExists(table)) continue
+          const existing = new Map(tx.getTable<{ id: string }>(table).map((r) => [r.id, r]))
+          for (const row of rows) {
+            if (!row || typeof row.id !== 'string') continue
+            if (existing.has(row.id)) tx.update(table, row.id, row)
+            else tx.insert(table, row)
+          }
+        }
+      })
+    } catch {
+      return { ok: false, message: '项目备份导入失败，数据未提交' }
     }
     return { ok: true, message: `已导入项目备份（${data.project_id}）` }
   },
