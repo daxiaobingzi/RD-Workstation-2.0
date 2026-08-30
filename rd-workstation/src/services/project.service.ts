@@ -13,6 +13,26 @@ function dbTableExists(name: string) {
   return TABLE_NAMES.has(name)
 }
 
+/** 项目备份允许导入的业务表；主数据表不随项目备份覆盖 */
+const BACKUP_TABLE_NAMES = new Set<string>([
+  T.projects,
+  T.buildings,
+  T.telecom_rooms,
+  T.project_systems,
+  T.design_parameters,
+  T.points,
+  T.design_results,
+  T.device_selections,
+  T.tasks,
+  T.schedules,
+  T.bill_versions,
+  T.bill_items,
+  T.budgets,
+  T.budget_items,
+  T.documents,
+  T.revisions,
+])
+
 /* ---------- 项目 Service ---------- */
 export const ProjectService = {
   list(): Project[] {
@@ -251,10 +271,22 @@ export const ProjectService = {
 
   /** 导入项目备份 JSON：按 id 逐行 upsert（已存在覆盖，不存在插入） */
   importBackup(json: string): { ok: boolean; message?: string } {
-    let data: { project_id: string; tables: Record<string, { id: string }[]> }
+    let data: { app?: string; version?: number; project_id?: string; tables: Record<string, { id: string }[]> }
     try {
       data = JSON.parse(json)
       if (!data?.tables || typeof data.tables !== 'object') return { ok: false, message: '备份文件格式不正确' }
+      if (data.app !== 'rd-workstation' || data.version !== 1 || typeof data.project_id !== 'string' || !data.project_id) {
+        return { ok: false, message: '备份文件版本或项目标识不正确' }
+      }
+      const projectRows = data.tables[T.projects]
+      if (!Array.isArray(projectRows) || !projectRows.some((row) => row?.id === data.project_id)) {
+        return { ok: false, message: '备份文件缺少有效的项目数据' }
+      }
+      for (const table of Object.keys(data.tables)) {
+        if (!BACKUP_TABLE_NAMES.has(table)) {
+          return { ok: false, message: `备份包含不允许导入的数据表：${table}` }
+        }
+      }
     } catch {
       return { ok: false, message: '备份文件无法解析' }
     }
