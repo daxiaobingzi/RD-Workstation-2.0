@@ -1,6 +1,7 @@
 import { repository } from '../db/memory-db'
 import { T } from '../types/domain'
 import type { Project, ProjectSystem, StandardSystem, Building, TelecomRoom } from '../types/domain'
+import type { TableMap, TableName } from '../types/table-map'
 import { uid } from '../lib/utils'
 
 function nowIso() {
@@ -107,26 +108,20 @@ export const ProjectService = {
     const hasRoom = (roomId?: string) => !!roomId && roomIds.has(roomId)
 
     repository.transaction((tx) => {
-      // 项目本身
       tx.remove(T.projects, id)
-      // 项目系统/空间结构
       tx.removeMany(T.project_systems, (r) => (r as ProjectSystem).project_id === id)
       tx.removeMany(T.buildings, (r) => (r as Building).project_id === id)
       tx.removeMany(T.telecom_rooms, (r) => hasBld((r as TelecomRoom).building_id))
-      // 设计域（按系统/建筑/弱电间归属）
       tx.removeMany(T.design_parameters, (r) => hasPs((r as { project_system_id?: string }).project_system_id))
       tx.removeMany(T.points, (r) => hasPs((r as { project_system_id?: string }).project_system_id) || hasRoom((r as { telecom_room_id?: string }).telecom_room_id))
       tx.removeMany(T.design_results, (r) => hasPs((r as { project_system_id?: string }).project_system_id))
       tx.removeMany(T.device_selections, (r) => hasPs((r as { project_system_id?: string }).project_system_id))
-      // 任务/日程
       tx.removeMany(T.tasks, (r) => (r as { project_id?: string }).project_id === id)
       tx.removeMany(T.schedules, (r) => (r as { project_id?: string }).project_id === id || hasPs((r as { project_system_id?: string }).project_system_id))
-      // 清单/预算
       tx.removeMany(T.bill_versions, (r) => (r as { project_id?: string }).project_id === id)
       tx.removeMany(T.bill_items, (r) => billIds.has((r as { bill_version_id?: string }).bill_version_id ?? ''))
       tx.removeMany(T.budgets, (r) => (r as { project_id?: string }).project_id === id)
       tx.removeMany(T.budget_items, (r) => budgetIds.has((r as { budget_id?: string }).budget_id ?? ''))
-      // 文档 / 点位快照（revisions）
       tx.removeMany(T.documents, (r) => (r as { project_id?: string }).project_id === id)
       tx.removeMany(T.revisions, (r) => {
         const snap = (r as { snapshot_json?: { project_system_id?: string } }).snapshot_json
@@ -150,21 +145,12 @@ export const ProjectService = {
   },
 
   addSystem(projectId: string, systemId: string, grade?: string): ProjectSystem {
-    const existing = repository.where<ProjectSystem>(
-      T.project_systems,
-      (r) => r.project_id === projectId && r.system_id === systemId,
-    )
+    const existing = repository.where<ProjectSystem>(T.project_systems, (r) => r.project_id === projectId && r.system_id === systemId)
     if (existing.length) return existing[0]
     const ps: ProjectSystem = {
-      id: uid('ps'),
-      project_id: projectId,
-      system_id: systemId,
-      status: 'draft',
-      progress: 0,
-      design_grade: grade,
+      id: uid('ps'), project_id: projectId, system_id: systemId, status: 'draft', progress: 0, design_grade: grade,
       sort_order: repository.getTable<ProjectSystem>(T.project_systems).filter((s) => s.project_id === projectId).length + 1,
-      created_at: nowIso(),
-      updated_at: nowIso(),
+      created_at: nowIso(), updated_at: nowIso(),
     }
     repository.insert(T.project_systems, ps)
     return ps
@@ -180,22 +166,11 @@ export const ProjectService = {
 
   /* ---------- 项目空间结构：建筑 → 区域 / 弱电间 ---------- */
   buildings(projectId: string): Building[] {
-    return repository
-      .getTable<Building>(T.buildings)
-      .filter((b) => b.project_id === projectId && b.enabled !== false)
-      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+    return repository.getTable<Building>(T.buildings).filter((b) => b.project_id === projectId && b.enabled !== false).sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
   },
   addBuilding(projectId: string, name: string): Building {
     const bs = this.buildings(projectId)
-    const b: Building = {
-      id: uid('bld'),
-      project_id: projectId,
-      name: name || `建筑${bs.length + 1}`,
-      sort_order: bs.length + 1,
-      enabled: true,
-      created_at: nowIso(),
-      updated_at: nowIso(),
-    }
+    const b: Building = { id: uid('bld'), project_id: projectId, name: name || `建筑${bs.length + 1}`, sort_order: bs.length + 1, enabled: true, created_at: nowIso(), updated_at: nowIso() }
     repository.insert(T.buildings, b)
     return b
   },
@@ -210,10 +185,7 @@ export const ProjectService = {
   },
 
   telecomRooms(buildingId: string): TelecomRoom[] {
-    return repository
-      .getTable<TelecomRoom>(T.telecom_rooms)
-      .filter((r) => r.building_id === buildingId && r.enabled !== false)
-      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+    return repository.getTable<TelecomRoom>(T.telecom_rooms).filter((r) => r.building_id === buildingId && r.enabled !== false).sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
   },
   addTelecomRoom(buildingId: string, name: string): TelecomRoom {
     const rooms = this.telecomRooms(buildingId)
@@ -232,7 +204,6 @@ export const ProjectService = {
   },
 
   /* ---------- 项目备份：导出 / 导入（§50 .rdw 骨架，JSON 项目包） ---------- */
-  /** 导出该项目涉及的全部业务表为 JSON 字符串 */
   exportBackup(projectId: string): string {
     const db = repository.db
     const systems = repository.getTable<ProjectSystem>(T.project_systems).filter((s) => s.project_id === projectId)
@@ -243,9 +214,7 @@ export const ProjectService = {
     const billIds = new Set(billVersions.map((v) => v.id))
     const budgets = repository.getTable<{ id: string; project_id?: string }>(T.budgets).filter((b) => b.project_id === projectId)
     const budgetIds = new Set(budgets.map((b) => b.id))
-
     const pick = (table: string, pred: (r: { [k: string]: unknown }) => boolean) => (db[table] ?? []).filter((r) => pred(r as { [k: string]: unknown }))
-
     const payload: Record<string, unknown[]> = {
       projects: pick(T.projects, (r) => r.id === projectId),
       buildings: pick(T.buildings, (r) => r.project_id === projectId),
@@ -259,11 +228,10 @@ export const ProjectService = {
       schedules: pick(T.schedules, (r) => r.project_id === projectId || !!(r.project_system_id && psIds.has(r.project_system_id as string))),
       bill_versions: billVersions,
       bill_items: pick(T.bill_items, (r) => billIds.has(r.bill_version_id as string)),
-      budgets: budgets,
+      budgets,
       budget_items: pick(T.budget_items, (r) => budgetIds.has(r.budget_id as string)),
       documents: pick(T.documents, (r) => r.project_id === projectId),
       revisions: pick(T.revisions, (r) => {
-        // 只导出本项目点位快照
         const snap = r.snapshot_json as { project_system_id?: string } | undefined
         return r.entity_type === 'point' && Boolean(snap?.project_system_id && psIds.has(snap.project_system_id))
       }),
@@ -271,36 +239,34 @@ export const ProjectService = {
     return JSON.stringify({ app: 'rd-workstation', version: 1, exported_at: new Date().toISOString(), project_id: projectId, tables: payload })
   },
 
-  /** 导入项目备份 JSON：按 id 逐行 upsert（已存在覆盖，不存在插入） */
   importBackup(json: string): { ok: boolean; message?: string } {
     let data: { app?: string; version?: number; project_id?: string; tables: Record<string, { id: string }[]> }
     try {
       data = JSON.parse(json)
       if (!data?.tables || typeof data.tables !== 'object') return { ok: false, message: '备份文件格式不正确' }
-      if (data.app !== 'rd-workstation' || data.version !== 1 || typeof data.project_id !== 'string' || !data.project_id) {
-        return { ok: false, message: '备份文件版本或项目标识不正确' }
-      }
+      if (data.app !== 'rd-workstation' || data.version !== 1 || typeof data.project_id !== 'string' || !data.project_id) return { ok: false, message: '备份文件版本或项目标识不正确' }
       const projectRows = data.tables[T.projects]
-      if (!Array.isArray(projectRows) || !projectRows.some((row) => row?.id === data.project_id)) {
-        return { ok: false, message: '备份文件缺少有效的项目数据' }
-      }
+      if (!Array.isArray(projectRows) || !projectRows.some((row) => row?.id === data.project_id)) return { ok: false, message: '备份文件缺少有效的项目数据' }
       for (const table of Object.keys(data.tables)) {
-        if (!BACKUP_TABLE_NAMES.has(table)) {
-          return { ok: false, message: `备份包含不允许导入的数据表：${table}` }
-        }
+        if (!BACKUP_TABLE_NAMES.has(table)) return { ok: false, message: `备份包含不允许导入的数据表：${table}` }
       }
     } catch {
       return { ok: false, message: '备份文件无法解析' }
     }
+
     try {
       repository.transaction((tx) => {
         for (const [table, rows] of Object.entries(data.tables)) {
           if (!Array.isArray(rows) || !dbTableExists(table)) continue
-          const existing = new Map(tx.getTable<{ id: string }>(table).map((r) => [r.id, r]))
+          const tableName = table as TableName
+          const existing = new Map(tx.getTable(tableName).map((r) => [r.id, r]))
           for (const row of rows) {
             if (!row || typeof row.id !== 'string') continue
-            if (existing.has(row.id)) tx.update(table, row.id, row)
-            else tx.insert(table, row)
+            if (existing.has(row.id)) {
+              tx.update(tableName, row.id, row as Partial<TableMap[typeof tableName]>)
+            } else {
+              tx.insert(tableName, row as TableMap[typeof tableName])
+            }
           }
         }
       })
