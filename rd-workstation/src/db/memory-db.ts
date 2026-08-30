@@ -7,6 +7,27 @@ import type { Repository } from '../repositories/repository'
  *  后续 SQLite/Drizzle 落地时，把本层替换为 Repository 实现即可，上层不变。 */
 export type DB = Record<string, Row[]>
 
+type PersistenceStatus = 'idle' | 'saved' | 'error'
+
+export interface DBState {
+  db: DB
+  ready: boolean
+  persistenceStatus: PersistenceStatus
+  persistenceError: string | null
+  lastPersistedAt: number | null
+  init: (seed: () => DB) => void
+  getTable: <T>(t: string) => T[]
+  getById: <T>(t: string, id: string) => T | undefined
+  where: <T>(t: string, pred: (row: T) => boolean) => T[]
+  insert: (t: string, row: Row) => void
+  insertMany: (t: string, rows: Row[]) => void
+  update: (t: string, id: string, patch: Record<string, unknown>) => void
+  remove: (t: string, id: string) => void
+  removeMany: (t: string, pred: (row: Row) => boolean) => void
+  replace: (t: string, rows: Row[]) => void
+  reset: () => void
+}
+
 const STORAGE_KEY = 'rdw-db-v5' // v5：点位收敛为「设备名称/建筑/弱电间/数量」，去除"区域"层级（用户决策）
 
 function loadPersisted(): DB | null {
@@ -21,39 +42,45 @@ function loadPersisted(): DB | null {
   }
 }
 
-function persist(db: DB) {
+function persist(db: DB): boolean {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(db))
+    return true
   } catch {
-    /* 存储满等异常静默 */
+    return false
   }
 }
 
-interface DBState {
-  db: DB
-  ready: boolean
-  init: (seed: () => DB) => void
-  getTable: <T>(t: string) => T[]
-  getById: <T>(t: string, id: string) => T | undefined
-  where: <T>(t: string, pred: (row: T) => boolean) => T[]
-  insert: (t: string, row: Row) => void
-  insertMany: (t: string, rows: Row[]) => void
-  update: (t: string, id: string, patch: Record<string, unknown>) => void
-  remove: (t: string, id: string) => void
-  removeMany: (t: string, pred: (row: Row) => boolean) => void
-  replace: (t: string, rows: Row[]) => void
-  reset: () => void
+function persistenceResult(ok: boolean) {
+  return ok
+    ? {
+        persistenceStatus: 'saved' as const,
+        persistenceError: null,
+        lastPersistedAt: Date.now(),
+      }
+    : {
+        persistenceStatus: 'error' as const,
+        persistenceError: '本地数据保存失败，请及时导出备份。',
+        lastPersistedAt: null,
+      }
 }
 
 export const useDB = create<DBState>((set, get) => ({
   db: {},
   ready: false,
+  persistenceStatus: 'idle',
+  persistenceError: null,
+  lastPersistedAt: null,
 
   init: (seed) => {
     const existing = loadPersisted()
     const db = existing ?? seed()
-    set({ db, ready: true })
-    persist(db)
+    const persisted = persist(db)
+    set({
+      db,
+      ready: true,
+      ...persistenceResult(persisted),
+    })
   },
 
   getTable: (t) => (get().db[t] ?? []) as unknown as never[],
@@ -67,15 +94,13 @@ export const useDB = create<DBState>((set, get) => ({
   insert: (t, row) =>
     set((s) => {
       const db = { ...s.db, [t]: [...(s.db[t] ?? []), row] }
-      persist(db)
-      return { db }
+      return { db, ...persistenceResult(persist(db)) }
     }),
 
   insertMany: (t, rows) =>
     set((s) => {
       const db = { ...s.db, [t]: [...(s.db[t] ?? []), ...rows] }
-      persist(db)
-      return { db }
+      return { db, ...persistenceResult(persist(db)) }
     }),
 
   update: (t, id, patch) =>
@@ -84,34 +109,46 @@ export const useDB = create<DBState>((set, get) => ({
         ...s.db,
         [t]: (s.db[t] ?? []).map((r) => (r.id === id ? { ...r, ...patch, id } : r)),
       }
-      persist(db)
-      return { db }
+      return { db, ...persistenceResult(persist(db)) }
     }),
 
   remove: (t, id) =>
     set((s) => {
       const db = { ...s.db, [t]: (s.db[t] ?? []).filter((r) => r.id !== id) }
-      persist(db)
-      return { db }
+      return { db, ...persistenceResult(persist(db)) }
     }),
 
   removeMany: (t, pred) =>
     set((s) => {
       const db = { ...s.db, [t]: (s.db[t] ?? []).filter((r) => !(pred as (r: Row) => boolean)(r)) }
-      persist(db)
-      return { db }
+      return { db, ...persistenceResult(persist(db)) }
     }),
 
   replace: (t, rows) =>
     set((s) => {
       const db = { ...s.db, [t]: rows }
-      persist(db)
-      return { db }
+      return { db, ...persistenceResult(persist(db)) }
     }),
 
   reset: () => {
-    localStorage.removeItem(STORAGE_KEY)
-    set({ db: {}, ready: false })
+    try {
+      localStorage.removeItem(STORAGE_KEY)
+      set({
+        db: {},
+        ready: false,
+        persistenceStatus: 'saved',
+        persistenceError: null,
+        lastPersistedAt: Date.now(),
+      })
+    } catch {
+      set({
+        db: {},
+        ready: false,
+        persistenceStatus: 'error',
+        persistenceError: '本地数据清理失败，请检查浏览器存储权限。',
+        lastPersistedAt: null,
+      })
+    }
   },
 }))
 
