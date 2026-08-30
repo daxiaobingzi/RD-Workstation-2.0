@@ -24,6 +24,7 @@ export interface DBState {
   remove: <K extends TableName>(t: K, id: string) => void
   removeMany: <K extends TableName>(t: K, pred: (row: TableMap[K]) => boolean) => void
   replace: <K extends TableName>(t: K, rows: TableMap[K][]) => void
+  transaction: <T>(fn: (tx: Repository) => T) => T
   reset: () => void
 }
 
@@ -62,6 +63,46 @@ function persistenceResult(ok: boolean) {
         persistenceError: '本地数据保存失败，请及时导出备份。',
         lastPersistedAt: null,
       }
+}
+
+function createRepository(db: DB, commit: (next: DB) => void): Repository {
+  const api: Repository = {
+    get db() {
+      return db
+    },
+    getTable: (t) => db[t] ?? [],
+    getById: (t, id) => db[t]?.find((r) => r.id === id),
+    where: (t, pred) => (db[t] ?? []).filter(pred),
+    insert: (t, row) => {
+      db[t] = [...(db[t] ?? []), row] as never
+      commit(db)
+    },
+    insertMany: (t, rows) => {
+      db[t] = [...(db[t] ?? []), ...rows] as never
+      commit(db)
+    },
+    update: (t, id, patch) => {
+      db[t] = (db[t] ?? []).map((r) => (r.id === id ? { ...r, ...patch, id } : r)) as never
+      commit(db)
+    },
+    remove: (t, id) => {
+      db[t] = (db[t] ?? []).filter((r) => r.id !== id) as never
+      commit(db)
+    },
+    removeMany: (t, pred) => {
+      db[t] = (db[t] ?? []).filter((r) => !pred(r)) as never
+      commit(db)
+    },
+    replace: (t, rows) => {
+      db[t] = rows
+      commit(db)
+    },
+    transaction: (fn) => {
+      const snapshot = structuredClone(db)
+      return fn(createRepository(snapshot, () => undefined))
+    },
+  }
+  return api
 }
 
 export const useDB = create<DBState>((set, get) => ({
@@ -121,6 +162,19 @@ export const useDB = create<DBState>((set, get) => ({
       return { db, ...persistenceResult(persist(db)) }
     }),
 
+  transaction: (fn) => {
+    const current = get().db
+    const draft = structuredClone(current)
+    const tx = createRepository(draft, () => undefined)
+    const result = fn(tx)
+    const persisted = persist(draft)
+    if (!persisted) {
+      throw new Error('本地数据保存失败，事务未提交。')
+    }
+    set({ db: draft, ...persistenceResult(true) })
+    return result
+  },
+
   reset: () => {
     try {
       localStorage.removeItem(STORAGE_KEY)
@@ -142,6 +196,7 @@ export class MemoryRepository implements Repository {
   remove<K extends TableName>(t: K, id: string): void { useDB.getState().remove(t, id) }
   removeMany<K extends TableName>(t: K, pred: (row: TableMap[K]) => boolean): void { useDB.getState().removeMany(t, pred) }
   replace<K extends TableName>(t: K, rows: TableMap[K][]): void { useDB.getState().replace(t, rows) }
+  transaction<T>(fn: (tx: Repository) => T): T { return useDB.getState().transaction(fn) }
 }
 
 /** 组合根单例：Service 经它访问数据，类型为 Repository 接口 */
