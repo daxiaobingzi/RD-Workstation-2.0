@@ -25,6 +25,8 @@ export interface SortableColumn<R> {
   maxWidth?: number
   /** 默认隐藏（可在「列」菜单中打开） */
   hiddenByDefault?: boolean
+  /** 锁定列：始终显示，不允许在「列」菜单中隐藏（如承载跳转/操作的关键列） */
+  locked?: boolean
   /** 行渲染；缺省显示文本 */
   render?: (row: R) => ReactNode
   align?: 'left' | 'right' | 'center'
@@ -54,6 +56,7 @@ export function SortableTable<R>({
   onReorder,
   renderRow,
   onRowClick,
+  onRowDoubleClick,
   expandedKeys,
   onToggleExpand,
   renderExpanded,
@@ -71,6 +74,8 @@ export function SortableTable<R>({
   renderRow?: (row: R, rowIndex: number) => ReactNode
   /** 行点击（如整行展开） */
   onRowClick?: (row: R, rowIndex: number) => void
+  /** 行双击（如打开编辑弹窗）；不响应按钮/输入控件上的双击 */
+  onRowDoubleClick?: (row: R, rowIndex: number, e: React.MouseEvent) => void
   /** 展开态 key 集合（与 onToggleExpand 配合显示展开行） */
   expandedKeys?: ReadonlySet<string>
   onToggleExpand?: (key: string) => void
@@ -83,11 +88,14 @@ export function SortableTable<R>({
   const baseKeys = useMemo(() => columns.map((c) => c.key), [columns])
   const [layout, setLayout] = useState<Layout>(() => {
     const saved = loadLayout(storageKey)
-    if (saved) return saved
+    if (saved) {
+      // 兼容旧布局：锁定列不允许出现在 hidden（即使历史遗留）
+      return { ...saved, hidden: saved.hidden.filter((k) => !(columns.find((c) => c.key === k)?.locked)) }
+    }
     return {
       widths: Object.fromEntries(columns.filter((c) => c.width).map((c) => [c.key, c.width!])),
       order: baseKeys,
-      hidden: columns.filter((c) => c.hiddenByDefault).map((c) => c.key),
+      hidden: columns.filter((c) => c.hiddenByDefault && !c.locked).map((c) => c.key),
     }
   })
   const [menuOpen, setMenuOpen] = useState(false)
@@ -115,7 +123,16 @@ export function SortableTable<R>({
   }
 
   const visible = useMemo(
-    () => layout.order.filter((k) => !layout.hidden.includes(k)).map((k) => columns.find((c) => c.key === k)!).filter(Boolean),
+    () =>
+      layout.order
+        .filter((k) => {
+          const col = columns.find((c) => c.key === k)
+          // 锁定列恒显示，不受 hidden 影响（布局校验失败时也不误隐藏）
+          if (col?.locked) return true
+          return !layout.hidden.includes(k)
+        })
+        .map((k) => columns.find((c) => c.key === k)!)
+        .filter(Boolean),
     [layout.order, layout.hidden, columns],
   )
 
@@ -159,7 +176,7 @@ export function SortableTable<R>({
     setLayout({
       widths: Object.fromEntries(columns.filter((c) => c.width).map((c) => [c.key, c.width!])),
       order: baseKeys,
-      hidden: columns.filter((c) => c.hiddenByDefault).map((c) => c.key),
+      hidden: columns.filter((c) => c.hiddenByDefault && !c.locked).map((c) => c.key),
     })
   }
 
@@ -277,6 +294,9 @@ export function SortableTable<R>({
   }
 
   const toggleHidden = (key: string, hide: boolean) => {
+    // 锁定列不允许隐藏；若尝试隐藏锁定列则直接忽略（并强制显示）
+    const col = columns.find((c) => c.key === key)
+    if (col?.locked && hide) return
     const hidden = hide ? [...layout.hidden, key] : layout.hidden.filter((k) => k !== key)
     persist({ hidden })
   }
@@ -301,12 +321,22 @@ export function SortableTable<R>({
                 <span className="font-mono text-[10px] text-faint">{visible.length}/{columns.length}</span>
               </div>
               <div className="max-h-64 overflow-y-auto p-1">
-                {columns.map((c) => (
-                  <label key={c.key} className="flex cursor-pointer items-center gap-1.5 rounded px-1.5 py-1 text-[12px] hover:bg-hover">
-                    <input type="checkbox" checked={!layout.hidden.includes(c.key)} onChange={(e) => toggleHidden(c.key, !e.target.checked)} className="accent-accent" />
-                    <span className="truncate">{c.title}</span>
-                  </label>
-                ))}
+                {columns.map((c) => {
+                  const isVisible = c.locked || !layout.hidden.includes(c.key)
+                  return (
+                    <label key={c.key} className={cn('flex cursor-pointer items-center gap-1.5 rounded px-1.5 py-1 text-[12px] hover:bg-hover', c.locked && 'cursor-not-allowed opacity-60')}>
+                      <input
+                        type="checkbox"
+                        checked={isVisible}
+                        disabled={c.locked}
+                        onChange={(e) => toggleHidden(c.key, !e.target.checked)}
+                        className="accent-accent"
+                      />
+                      <span className="truncate">{c.title}</span>
+                      {c.locked && <span className="ml-auto shrink-0 rounded bg-surface-subtle px-1 text-[9.5px] text-faint">固定</span>}
+                    </label>
+                  )
+                })}
               </div>
               <div className="border-t border-rule p-1">
                 <button
@@ -417,6 +447,11 @@ export function SortableTable<R>({
                     className={cn('hover:bg-hover', dragFrom === i && 'opacity-40', dropLine && 'bg-accent-soft/40')}
                     style={dropLine ? { boxShadow: dropLine === 'before' ? 'inset 0 2px 0 0 var(--accent,#6366f1)' : 'inset 0 -2px 0 0 var(--accent,#6366f1)' } : undefined}
                     onClick={onRowClick ? () => onRowClick(row, i) : onToggleExpand ? () => onToggleExpand(key) : undefined}
+                    onDoubleClick={onRowDoubleClick ? (e) => {
+                      // 双击按钮/输入控件不触发行双击（避免双击名称跳转或误触操作列）
+                      if ((e.target as HTMLElement).closest('button, a, input, select')) return
+                      onRowDoubleClick(row, i, e)
+                    } : undefined}
                   >
                     {onToggleExpand && (
                       <TD data-col="__expand__" className="px-0 text-center align-middle">

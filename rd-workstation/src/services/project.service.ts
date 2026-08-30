@@ -21,6 +21,21 @@ export const ProjectService = {
       .filter((p) => !p.archived_at)
       .sort((a, b) => (a.sort_order ?? 9999) - (b.sort_order ?? 9999))
   },
+  /** 已归档项目（按归档时间倒序，供"已归档"视图使用；get/list 行为不变） */
+  listArchived(): Project[] {
+    return repository
+      .getTable<Project>(T.projects)
+      .filter((p) => !!p.archived_at)
+      .sort((a, b) => (b.archived_at ?? '').localeCompare(a.archived_at ?? ''))
+  },
+  /** 归档项目：写入 archived_at 后，list / 今日工作台 / 清单 / 设计选择器均自动排除 */
+  archive(id: string) {
+    repository.update(T.projects, id, { archived_at: nowIso() })
+  },
+  /** 恢复归档项目：清空 archived_at（合并 patch 置 undefined，!archived_at 过滤对 undefined 生效） */
+  restore(id: string) {
+    repository.update(T.projects, id, { archived_at: undefined })
+  },
   get(id: string): Project | undefined {
     return repository.getById<Project>(T.projects, id)
   },
@@ -50,9 +65,52 @@ export const ProjectService = {
   update(id: string, patch: Partial<Project>) {
     repository.update(T.projects, id, { ...patch, updated_at: nowIso() })
   },
+  /** 删除项目：级联清除本项目全部关联数据（系统/点位/推导/选型/任务/日程/清单/预算/文档/版本快照） */
   remove(id: string) {
+    const psIds = new Set(
+      repository.getTable<ProjectSystem>(T.project_systems).filter((r) => r.project_id === id).map((r) => r.id),
+    )
+    const bldIds = new Set(
+      repository.getTable<Building>(T.buildings).filter((r) => r.project_id === id).map((r) => r.id),
+    )
+    const roomIds = new Set(
+      repository.getTable<TelecomRoom>(T.telecom_rooms).filter((r) => bldIds.has(r.building_id)).map((r) => r.id),
+    )
+    const billIds = new Set(
+      repository.getTable<{ id: string; project_id?: string }>(T.bill_versions).filter((r) => r.project_id === id).map((r) => r.id),
+    )
+    const budgetIds = new Set(
+      repository.getTable<{ id: string; project_id?: string }>(T.budgets).filter((r) => r.project_id === id).map((r) => r.id),
+    )
+    const hasPs = (psId?: string) => !!psId && psIds.has(psId)
+    const hasBld = (bldId?: string) => !!bldId && bldIds.has(bldId)
+    const hasRoom = (roomId?: string) => !!roomId && roomIds.has(roomId)
+
+    // 项目本身
     repository.remove(T.projects, id)
+    // 项目系统/空间结构
     repository.removeMany(T.project_systems, (r) => (r as ProjectSystem).project_id === id)
+    repository.removeMany(T.buildings, (r) => (r as Building).project_id === id)
+    repository.removeMany(T.telecom_rooms, (r) => hasBld((r as TelecomRoom).building_id))
+    // 设计域（按系统/建筑/弱电间归属）
+    repository.removeMany(T.design_parameters, (r) => hasPs((r as { project_system_id?: string }).project_system_id))
+    repository.removeMany(T.points, (r) => hasPs((r as { project_system_id?: string }).project_system_id) || hasRoom((r as { telecom_room_id?: string }).telecom_room_id))
+    repository.removeMany(T.design_results, (r) => hasPs((r as { project_system_id?: string }).project_system_id))
+    repository.removeMany(T.device_selections, (r) => hasPs((r as { project_system_id?: string }).project_system_id))
+    // 任务/日程
+    repository.removeMany(T.tasks, (r) => (r as { project_id?: string }).project_id === id)
+    repository.removeMany(T.schedules, (r) => (r as { project_id?: string }).project_id === id || hasPs((r as { project_system_id?: string }).project_system_id))
+    // 清单/预算
+    repository.removeMany(T.bill_versions, (r) => (r as { project_id?: string }).project_id === id)
+    repository.removeMany(T.bill_items, (r) => billIds.has((r as { bill_version_id?: string }).bill_version_id ?? ''))
+    repository.removeMany(T.budgets, (r) => (r as { project_id?: string }).project_id === id)
+    repository.removeMany(T.budget_items, (r) => budgetIds.has((r as { budget_id?: string }).budget_id ?? ''))
+    // 文档 / 点位快照（revisions）
+    repository.removeMany(T.documents, (r) => (r as { project_id?: string }).project_id === id)
+    repository.removeMany(T.revisions, (r) => {
+      const snap = (r as { snapshot_json?: { project_system_id?: string } }).snapshot_json
+      return (r as { entity_type?: string }).entity_type === 'point' && hasPs(snap?.project_system_id)
+    })
   },
 
   /** 项目系统（含标准系统名） */

@@ -82,6 +82,19 @@ export interface SystemTemplate extends Row {
   content_json?: unknown
   enabled?: boolean
 }
+/** 设备中心系统（设备主数据组织维度，可自定义）：id 稳定（sys_vss 等），code 为设备编码前缀简写（唯一） */
+export interface DeviceSystem extends Row {
+  /** 系统简写（设备编码前缀）：大写字母/数字，全局唯一，如 VSS/GEN */
+  code: string
+  /** 系统名称：如"视频监控系统" */
+  name: string
+  /** 所属分组：安防/信息网络/机房/公共设施/楼宇控制/通用…（可自定义新增） */
+  group: string
+  sort_order?: number
+  enabled?: boolean
+  created_at?: string
+  updated_at?: string
+}
 export interface Building extends Row {
   project_id: string
   name: string
@@ -191,6 +204,8 @@ export interface Product extends Row {
   system_id?: string
   /** 类别标签（front/back/net/cable/aux…，与 DeviceCategory.category_type 一致） */
   category?: string
+  /** 设备类型编码（唯一）：{系统简写}-{分类拼音首字母}-{三位序号}，如 VSS-QD-001；由 DeviceCode 服务自动分配 */
+  device_code?: string
   description?: string
   /** 设备级数量推导链配置（U4 使用）：mode=carry/mul/fixed；source=front/指定设备；factor/reserve/round */
   chain_json?: string
@@ -371,6 +386,10 @@ export interface BillItem extends Row {
   source_type?: string
   source_id?: string
   sort_order?: number
+  /** 手工调整标记：数量/单价被手工改过，重新生成清单时保留此行的手工值 */
+  manually_tuned?: boolean
+  /** 备注（单行文本，材料表/预算清单/概算清单行内编辑） */
+  remark?: string
 }
 export interface Budget extends Row {
   project_id: string
@@ -571,6 +590,7 @@ export const T = {
   product_families: 'product_families',
   products: 'products',
   product_models: 'product_models',
+  device_systems: 'device_systems',
   device_materials: 'device_materials',
   brands: 'brands',
   model_brands: 'model_brands',

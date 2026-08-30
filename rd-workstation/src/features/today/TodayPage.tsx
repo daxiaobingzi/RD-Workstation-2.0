@@ -24,6 +24,8 @@ export function TodayPage() {
   const navigate = useNavigate()
   const [taskModalOpen, setTaskModalOpen] = useState(false)
   const [editTask, setEditTask] = useState<Task | null>(null)
+  // 「今日重点」：当前选中项目（候选 = 智能排序前 5，可下拉切换；仅本日视图状态，不持久化）
+  const [focusId, setFocusId] = useState<string | null>(null)
   const todayStr = todayISO()
   const today = useMemo(() => {
     const now = new Date()
@@ -41,7 +43,12 @@ export function TodayPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const projects = useMemo(() => ProjectService.list(), [db])
   const projName = useMemo(() => new Map(projects.map((p) => [p.id, p.name])), [projects])
-  const projectProgress = projects.map((p) => {
+  // 今日工作台只聚焦进行中项目（designing / reviewing）：草稿、已完成不参与计算与展示，归档已被 list() 过滤
+  const activeProjects = useMemo(
+    () => projects.filter((p) => p.status === 'designing' || p.status === 'reviewing'),
+    [projects],
+  )
+  const activeProjectProgress = activeProjects.map((p) => {
     const pss = ProjectService.systems(p.id)
     const avg = pss.length ? Math.round(pss.reduce((s, x) => s + x.progress, 0) / pss.length) : 0
     return { project: p, progress: avg }
@@ -50,17 +57,52 @@ export function TodayPage() {
   const activeGoals = goals.filter((g) => g.status !== 'archived').slice(0, 3)
   const habits = useDB.getState().getTable<{ id: string; name: string }>(T.habits)
   const habitRecords = useDB.getState().getTable<{ habit_id: string; date: string; completed: boolean }>(T.habit_records)
-  // AI 建议聚合所有项目 × 所有系统的校核告警（原仅取第一个项目的第一个系统）
-  const aiWarnings = useMemo<{ severity: string; message: string; projectId: string; psId: string; systemName: string }[]>(() => {
-    const out: { severity: string; message: string; projectId: string; psId: string; systemName: string }[] = []
-    for (const p of projects) {
+  // AI 建议：仅对进行中项目 × 子系统执行校核，按项目分组（解决不同项目同名系统无法区分）；项目内 danger 优先，项目按告警数降序
+  const aiGroups = useMemo(() => {
+    type AIItem = { severity: string; message: string; psId: string; systemName: string }
+    const groups: { projectId: string; projectName: string; items: AIItem[] }[] = []
+    for (const p of activeProjects) {
+      const items: AIItem[] = []
       for (const ps of ProjectService.systems(p.id)) {
-        const checks = DesignService.check(ps.id).filter((c) => c.severity !== 'ok')
-        for (const c of checks) out.push({ severity: c.severity, message: c.message, projectId: p.id, psId: ps.id, systemName: ps.systemName })
+        for (const c of DesignService.check(ps.id)) {
+          if (c.severity === 'ok') continue
+          items.push({ severity: c.severity, message: c.message, psId: ps.id, systemName: ps.systemName })
+        }
+      }
+      if (items.length) {
+        items.sort((a, b) => (a.severity === 'danger' ? -1 : 1) - (b.severity === 'danger' ? -1 : 1))
+        groups.push({ projectId: p.id, projectName: p.name, items })
       }
     }
-    return out
-  }, [projects])
+    groups.sort((a, b) => b.items.length - a.items.length)
+    return groups
+  }, [activeProjects])
+
+  // 今日重点 · 智能推荐：① 今日有截止任务 → ② AI 告警(danger×10/warn×1) → ③ 平均进度最低 → ④ 最近更新
+  const focusRanked = useMemo(() => {
+    const todayDueCount = new Map<string, number>()
+    for (const t of openTasks) {
+      if ((t.due_at ?? '').slice(0, 10) === todayStr) {
+        const pid = t.project_id ?? ''
+        todayDueCount.set(pid, (todayDueCount.get(pid) ?? 0) + 1)
+      }
+    }
+    const warnScore = new Map<string, number>()
+    for (const g of aiGroups) {
+      const score = g.items.reduce((s, it) => s + (it.severity === 'danger' ? 10 : 1), 0)
+      warnScore.set(g.projectId, (warnScore.get(g.projectId) ?? 0) + score)
+    }
+    const avgOf = (id: string) => {
+      const pss = ProjectService.systems(id)
+      return pss.length ? pss.reduce((s, x) => s + (x.progress || 0), 0) / pss.length : 0
+    }
+    return [...activeProjects]
+      .map((p) => ({ p, due: todayDueCount.get(p.id) ?? 0, warn: warnScore.get(p.id) ?? 0, avg: avgOf(p.id) }))
+      .sort((a, b) => b.due - a.due || b.warn - a.warn || a.avg - b.avg || (b.p.updated_at ?? '').localeCompare(a.p.updated_at ?? ''))
+      .map((x) => x.p)
+  }, [activeProjects, openTasks, aiGroups, todayStr])
+  // 未在手选时取推荐首位；手选失效（如项目已归档）自动回退首位
+  const focusProject = focusRanked.find((p) => p.id === (focusId ?? '')) ?? focusRanked[0]
 
   return (
     <div className="mx-auto max-w-[1080px] space-y-4 p-5">
@@ -77,29 +119,39 @@ export function TodayPage() {
         </div>
       </div>
 
-      {/* 今日重点：动态取进行中项目的第一个子系统（去硬编码 demo id/文案） */}
+      {/* 今日重点：智能推荐（今日截止任务 → AI告警 → 进度最低 → 最近更新），无进行中项目则不展示 */}
       {(() => {
-        const active = projects.find((p) => p.status === 'designing' || p.status === 'reviewing') ?? projects[0]
-        if (!active) return null
-        const pss = ProjectService.systems(active.id)
+        if (!focusProject) return null
+        const pss = ProjectService.systems(focusProject.id).slice().sort((a, b) => (a.progress ?? 0) - (b.progress ?? 0))
+        const focusSys = pss[0]
         return (
           <div className="rounded-lg border border-accent/30 bg-gradient-to-r from-accent-soft to-accent2-soft px-4 py-3">
             <div className="flex items-center gap-2 text-[12px] font-semibold text-accent">
               <Target className="size-3.5" /> 今日重点
+              {focusRanked.length > 1 && (
+                <select
+                  value={focusProject.id}
+                  onChange={(e) => setFocusId(e.target.value)}
+                  title="候选项目按智能推荐排序，可手动切换"
+                  className="ml-1 h-6 rounded-[6px] border border-accent/30 bg-surface px-1 text-[11px] font-normal text-ink"
+                >
+                  {focusRanked.slice(0, 5).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              )}
             </div>
             <div className="mt-1.5 flex items-center justify-between gap-3">
               <p className="text-[14px] font-medium text-ink">
                 {pss.length
-                  ? `推进「${active.name} · ${pss[0].systemName}」设计（点位 / 设备 / 清单 / 预算全链落库）`
-                  : `推进「${active.name}」：添加子系统完成设计初稿`}
+                  ? `推进「${focusProject.name} · ${focusSys?.systemName}」设计（点位 / 设备 / 清单 / 预算全链落库）`
+                  : `推进「${focusProject.name}」：添加子系统完成设计初稿`}
               </p>
               {pss.length > 0 && (
                 <button
                   type="button"
-                  onClick={() => navigate(`/projects/${active.id}/systems/${pss[0].id}`)}
+                  onClick={() => navigate(`/projects-v2/${focusProject.id}/derive`)}
                   className="flex shrink-0 items-center gap-1 rounded-[6px] bg-accent px-2.5 py-1.5 text-[12px] font-medium text-white hover:bg-accent-strong"
                 >
-                  进入工作区 <ArrowRight className="size-3.5" />
+                  进入推导 <ArrowRight className="size-3.5" />
                 </button>
               )}
             </div>
@@ -197,16 +249,16 @@ export function TodayPage() {
           </PanelCard>
         </section>
 
-        {/* 右：项目进度 */}
+        {/* 右：项目进度（仅进行中，超 5 折叠） */}
         <section className="space-y-4 md:col-span-3">
-          <PanelCard icon={<TrendingUp className="size-4" />} title="项目进度" count={projectProgress.length}>
+          <PanelCard icon={<TrendingUp className="size-4" />} title="项目进度" count={activeProjectProgress.length}>
             <ul className="space-y-3">
-              {projectProgress.map(({ project, progress }) => (
+              {activeProjectProgress.slice(0, 5).map(({ project, progress }) => (
                 <li key={project.id}>
                   <div className="mb-1 flex items-center justify-between">
                     <button
                       type="button"
-                      onClick={() => navigate(`/projects/${project.id}`)}
+                      onClick={() => navigate(`/projects-v2/${project.id}`)}
                       className="max-w-[70%] truncate text-[12.5px] font-medium text-ink hover:text-accent"
                     >
                       {project.name}
@@ -217,6 +269,18 @@ export function TodayPage() {
                 </li>
               ))}
             </ul>
+            {activeProjectProgress.length > 5 && (
+              <button
+                type="button"
+                onClick={() => navigate('/projects-v2')}
+                className="mt-2.5 w-full rounded-md border border-rule py-1 text-[12px] font-medium text-muted hover:bg-hover hover:text-ink"
+              >
+                另 {activeProjectProgress.length - 5} 个项目，查看全部 →
+              </button>
+            )}
+            {!activeProjectProgress.length && (
+              <p className="text-[12px] text-faint">当前没有进行中的项目，去项目中心创建吧。</p>
+            )}
           </PanelCard>
 
           <PanelCard icon={<Target className="size-4" />} title="目标进度" count={activeGoals.length}>
@@ -280,33 +344,55 @@ export function TodayPage() {
         </section>
         <section className="md:col-span-7">
           <PanelCard icon={<Sparkles className="size-4" />} title="AI 建议" badge="今日简报">
-            {aiWarnings.length ? (
-              <>
-                <ul className="space-y-1.5">
-                  {aiWarnings.slice(0, 6).map((w, i) => (
-                    <li key={`${w.psId}-${i}`} className="flex items-start gap-2 rounded-md bg-surface-subtle px-2.5 py-1.5 text-[12.5px] text-muted">
-                      <span className={cn('mt-1 size-1.5 shrink-0 rounded-full', w.severity === 'danger' ? 'bg-danger' : 'bg-warn')} />
-                      <span>
-                        <span className="font-medium text-ink">[{w.systemName}]</span> {w.message}
-                        {w.severity === 'danger' && (
-                          <button
-                            type="button"
-                            className="ml-2 text-[12px] font-medium text-accent hover:underline"
-                            onClick={() => navigate(`/projects/${w.projectId}/systems/${w.psId}`)}
-                          >
-                            去处理
-                          </button>
+            {aiGroups.length ? (
+              <div className="space-y-2">
+                {aiGroups.map((g) => {
+                  const shown = g.items.slice(0, 4)
+                  const rest = g.items.length - shown.length
+                  return (
+                    <div key={g.projectId} className="rounded-md border border-rule bg-surface-subtle/40">
+                      <div className="flex items-center justify-between border-b border-rule/60 px-2.5 py-1.5">
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/projects-v2/${g.projectId}`)}
+                          className="truncate text-[12.5px] font-semibold text-ink hover:text-accent"
+                          title="打开项目"
+                        >
+                          {g.projectName}
+                        </button>
+                        <span className="ml-2 shrink-0 rounded-full bg-surface px-1.5 font-mono text-[10.5px] text-muted">{g.items.length} 条</span>
+                      </div>
+                      <ul className="space-y-0.5 p-1.5">
+                        {shown.map((w, i) => (
+                          <li key={`${g.projectId}-${i}`} className="flex items-start gap-1.5 rounded bg-surface px-2 py-1 text-[12.5px] text-muted">
+                            <span className={cn('mt-1 size-1.5 shrink-0 rounded-full', w.severity === 'danger' ? 'bg-danger' : 'bg-warn')} />
+                            <span className="min-w-0 flex-1">
+                              <span className="mr-1 whitespace-nowrap rounded bg-surface-subtle px-1 py-px text-[10px]">{w.systemName}</span>
+                              {w.message}
+                            </span>
+                            {w.severity === 'danger' && (
+                              <button
+                                type="button"
+                                className="shrink-0 text-[12px] font-medium text-accent hover:underline"
+                                onClick={() => navigate(`/projects-v2/${g.projectId}/derive`)}
+                              >
+                                去处理
+                              </button>
+                            )}
+                          </li>
+                        ))}
+                        {rest > 0 && (
+                          <li className="px-2 pt-0.5 text-[11.5px] text-faint">
+                            另有 {rest} 条，请前往项目逐步处理。
+                          </li>
                         )}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-                {aiWarnings.length > 6 && (
-                  <p className="mt-1.5 text-[11.5px] text-faint">另有 {aiWarnings.length - 6} 条告警，请逐系统前往处理。</p>
-                )}
-              </>
+                      </ul>
+                    </div>
+                  )
+                })}
+              </div>
             ) : (
-              <p className="text-[12.5px] text-muted">设计链状态良好，暂无告警。</p>
+              <p className="text-[12.5px] text-muted">所有进行中项目设计链状态良好，暂无告警。</p>
             )}
           </PanelCard>
         </section>

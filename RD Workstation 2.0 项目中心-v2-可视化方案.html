@@ -1,0 +1,1218 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RD Workstation 2.0 · 项目中心 v2 可视化方案</title>
+<style>
+  :root{
+    --accent:#7c5cff; --accent2:#4aa8ff; --ink:#1a1a2e; --muted:#6b6b80; --faint:#9a9aad;
+    --surface:#ffffff; --surface-subtle:#f5f5fa; --rule:#e4e4ee; --hover:#f1f1f7;
+    --ok:#18a058; --warn:#d0a12c; --danger:#d23f3f; --brand-grad:linear-gradient(135deg,#7c5cff,#4aa8ff);
+  }
+  *{box-sizing:border-box; margin:0; padding:0}
+  body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",system-ui,sans-serif; background:#eef0f5; color:var(--ink); font-size:14px; line-height:1.5}
+  a{color:var(--accent); text-decoration:none}
+  .pageNote{max-width:1280px; margin:0 auto}
+  /* ============ 文档头 ============ */
+  .docHead{background:var(--brand-grad); color:#fff; padding:18px 24px; display:flex; align-items:center; gap:16px}
+  .docHead .logo{width:34px;height:34px;border-radius:8px;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-weight:700}
+  .docHead h1{font-size:18px; font-weight:700}
+  .docHead p{font-size:12px; opacity:.85}
+  .docTabs{background:#fff; border-bottom:1px solid var(--rule); display:flex; gap:2px; padding:0 16px; position:sticky; top:0; z-index:50; overflow-x:auto}
+  .docTabs button{flex:0 0 auto; padding:10px 14px; font-size:13px; font-weight:500; color:var(--muted); background:none; border:none; border-bottom:2px solid transparent; cursor:pointer; white-space:nowrap}
+  .docTabs button:hover{color:var(--ink)}
+  .docTabs button.on{color:var(--accent); border-bottom-color:var(--accent); font-weight:600}
+  /* ============ 布局 ============ */
+  .wrap{display:flex; gap:20px; padding:20px; align-items:flex-start}
+  .side{width:228px; flex:0 0 228px; position:sticky; top:56px; background:#fff; border:1px solid var(--rule); border-radius:12px; padding:10px}
+  .side .sec{font-size:11px; color:var(--faint); letter-spacing:1px; padding:6px 10px 4px; font-weight:600}
+  .side .sec2{font-size:11px; color:var(--faint); letter-spacing:1px; padding:16px 10px 4px; font-weight:600; border-top:1px solid var(--rule); margin-top:8px}
+  .side a{display:flex; gap:8px; align-items:center; padding:7px 10px; border-radius:7px; font-size:12.5px; color:var(--muted); margin-bottom:1px}
+  .side a b{font-weight:600; color:var(--ink)}
+  .side a:hover{background:var(--hover); color:var(--ink)}
+  .side a.on{background:#f0ecff; color:#5b39e8; font-weight:600}
+  .side a .num{width:20px; height:20px; border-radius:6px; background:var(--surface-subtle); display:flex; align-items:center; justify-content:center; font-size:11px; color:var(--muted); font-weight:600}
+  .side a.on .num{background:var(--accent); color:#fff}
+  .main{flex:1; min-width:0}
+  /* ============ 模块卡片 ============ */
+  .mod{background:#fff; border:1px solid var(--rule); border-radius:12px; padding:18px 20px 22px; margin-bottom:20px}
+  .mod h2{font-size:16px; display:flex; align-items:center; gap:10px; margin-bottom:4px}
+  .mod h2 .tag{font-size:10.5px; background:#eef0ff; color:#5b39e8; padding:2px 8px; border-radius:999px; font-weight:600}
+  .mod .desc{color:var(--muted); font-size:12.5px; margin-bottom:14px}
+  .req{background:var(--surface-subtle); border:1px solid var(--rule); border-radius:8px; padding:10px 14px; font-size:12.5px; color:var(--muted); margin-bottom:16px}
+  .req b{color:var(--ink)}
+  .req .done{color:var(--ok); font-weight:600}
+  .req .todo{color:var(--danger); font-weight:600}
+  .req ul{list-style:none; margin-top:4px}
+  .req li{padding:2px 0}
+  .req li::before{content:"◆ "; color:var(--accent)}
+  /* ---------- 通用 UI 原语 ---------- */
+  .bar{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+  .btn{border:1px solid var(--rule); background:#fff; border-radius:7px; padding:6px 12px; font-size:12.5px; cursor:pointer; color:var(--ink); display:inline-flex; align-items:center; gap:6px}
+  .btn:hover{border-color:var(--accent); color:var(--accent)}
+  .btn.pri{background:var(--accent); border-color:var(--accent); color:#fff}
+  .btn.pri:hover{opacity:.9; color:#fff}
+  .btn.ghost{background:transparent}
+  .btn.sm{padding:3px 8px; font-size:11.5px; border-radius:6px}
+  .seg{display:inline-flex; background:var(--surface-subtle); border:1px solid var(--rule); border-radius:7px; overflow:hidden}
+  .seg button{padding:5px 12px; font-size:12px; border:none; background:none; cursor:pointer; color:var(--muted)}
+  .seg button.on{background:#fff; color:var(--accent); font-weight:600; box-shadow:0 0 0 1px var(--rule) inset}
+  .search{display:inline-flex; align-items:center; gap:6px; border:1px solid var(--rule); border-radius:7px; padding:5px 10px; font-size:12px; color:var(--faint); background:#fff; min-width:180px}
+  .search::before{content:"⌕"; font-weight:700}
+  .badge{display:inline-flex; align-items:center; gap:4px; font-size:10.5px; padding:1px 7px; border-radius:999px; font-weight:600}
+  .badge.gray{background:var(--surface-subtle); color:var(--muted); border:1px solid var(--rule)}
+  .badge.purple{background:#f0ecff; color:#5b39e8}
+  .badge.green{background:#e8f7ef; color:var(--ok)}
+  .badge.blue{background:#e9f3ff; color:var(--accent2)}
+  .badge.red{background:#fdeeee; color:var(--danger)}
+  .card{border:1px solid var(--rule); border-radius:10px; background:#fff; overflow:hidden}
+  .card .cHead{display:flex; align-items:center; gap:8px; padding:10px 14px; border-bottom:1px solid var(--rule); font-size:13px; font-weight:600}
+  .card .cHead .more{margin-left:auto; display:flex; gap:6px; align-items:center}
+  .card .cBody{padding:12px 14px}
+  .kpis{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:14px 0}
+  .kpi{border:1px solid var(--rule); border-radius:10px; background:#fff; padding:12px 14px}
+  .kpi .k{font-size:11px; color:var(--faint); font-weight:600; letter-spacing:.5px}
+  .kpi .v{font-size:22px; font-weight:700; margin-top:4px; font-family:ui-monospace,"Cascadia Mono",monospace}
+  .kpi .v em{font-style:normal; color:var(--ok)}
+  .kpi .s{font-size:11px; color:var(--muted); margin-top:2px}
+  /* ---------- 表格 ---------- */
+  table{width:100%; border-collapse:collapse; font-size:12.5px}
+  th{text-align:left; font-weight:600; color:var(--muted); background:var(--surface-subtle); padding:7px 10px; font-size:11.5px; white-space:nowrap; border-bottom:1px solid var(--rule)}
+  td{padding:7px 10px; border-bottom:1px solid #f0f0f7; vertical-align:middle; white-space:nowrap}
+  tr:hover td{background:#fafaff}
+  td.num,th.num{text-align:right; font-variant-numeric:tabular-nums}
+  .mono{font-family:ui-monospace,monospace; font-size:11.5px}
+  .muted{color:var(--muted)} .faint{color:var(--faint)} .accent{color:var(--accent)} .ok{color:var(--ok)} .danger{color:var(--danger)}
+  .rowHandle{color:#c5c5d2; cursor:grab; font-weight:700}
+  .chk{width:14px;height:14px;accent-color:var(--accent); cursor:pointer}
+  /* 树形分组表：系统面板 */
+  .sysPanel{border:1px solid var(--rule); border-radius:10px; overflow:hidden; margin-bottom:12px}
+  .sysHead{display:flex; align-items:center; gap:8px; background:var(--surface-subtle); padding:9px 12px; cursor:pointer; font-size:13px; font-weight:600; border-bottom:1px solid var(--rule)}
+  .sysHead:hover{background:#f0eefb}
+  .sysHead .caret{transition:transform .15s; color:var(--faint); font-size:10px}
+  .sysHead.open .caret{transform:rotate(90deg)}
+  .sysHead .money{margin-left:auto; font-weight:700; font-family:ui-monospace,monospace; font-size:12.5px}
+  .sysHead .cnt{font-weight:400; font-size:11px; color:var(--faint)}
+  .groupRow{background:#fafafd; font-size:11px; color:var(--muted); font-weight:600; letter-spacing:.5px}
+  .groupRow td{padding:4px 10px}
+  /* 弹窗 */
+  .mask{position:fixed; inset:0; background:rgba(15,15,35,.38); display:none; align-items:center; justify-content:center; z-index:100}
+  .mask.show{display:flex}
+  .dlg{background:#fff; border-radius:12px; width:640px; max-width:92vw; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,.18)}
+  .dlg .dHead{padding:14px 18px; font-size:14px; font-weight:700; border-bottom:1px solid var(--rule); display:flex; align-items:center}
+  .dlg .dHead button{margin-left:auto; border:none; background:none; font-size:16px; cursor:pointer; color:var(--faint)}
+  .dlg .dBd{padding:16px 18px; max-height:580px; overflow:auto}
+  .dlg .dFt{padding:12px 18px; border-top:1px solid var(--rule); display:flex; justify-content:flex-end; gap:8px}
+  .frow{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+  .field{display:flex; flex-direction:column; gap:4px; margin-bottom:10px}
+  .field label{font-size:11.5px; color:var(--muted); font-weight:600}
+  .field input,.field select{border:1px solid var(--rule); border-radius:7px; padding:6px 9px; font-size:12.5px; background:#fff; color:var(--ink); outline:none}
+  .field input:focus,.field select:focus{border-color:var(--accent)}
+  .sch{display:flex; gap:8px; align-items:center; padding:8px 10px; border-bottom:1px solid var(--rule); font-size:12px; color:var(--faint)}
+  /* 折叠区 */
+  .alerts{display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap}
+  .note{margin-top:10px; font-size:12px; color:var(--faint); background:var(--surface-subtle); border-radius:8px; padding:8px 12px}
+  .pill{display:inline-flex; align-items:center; gap:5px; border:1px solid var(--rule); border-radius:999px; font-size:11.5px; padding:3px 10px; margin-right:6px; background:#fff}
+  .progress{height:6px; background:var(--rule); border-radius:99px; overflow:hidden; min-width:60px}
+  .progress i{display:block; height:100%; background:var(--brand-grad); border-radius:99px}
+  .priceBd{background:#fffdf4; border:1px solid #f0e3b0; border-radius:8px; padding:8px 12px; margin-bottom:12px; font-size:12.5px}
+  .priceBd b{color:#b07d14}
+  .tb-tip{font-size:11.5px; color:var(--faint); background:#fbfbff; border:1px dashed #d8d8ea; padding:6px 12px; border-radius:7px; margin-bottom:10px}
+  .tb-tip b{color:#5b39e8}
+  /* 步骤条 */
+  .steps{display:flex; gap:0; align-items:center; font-size:12px; color:var(--muted); margin-bottom:16px; flex-wrap:wrap}
+  .steps span{display:inline-flex;align-items:center;gap:6px; padding:4px 10px; background:#fff; border:1px solid var(--rule); border-radius:999px; margin-right:8px}
+  .steps span.on{background:var(--accent); color:#fff; border-color:var(--accent); font-weight:600}
+  .steps span.arrow{background:none;border:none;color:var(--faint);padding:0;margin:0}
+
+  /* 设备中心富文本关联 */
+  button.link{background:none;border:none;color:#5b39e8;cursor:pointer;font-size:12.5px;font-weight:600;padding:0;text-decoration:underline;text-underline-offset:2px}
+  button.link:hover{color:#3d21c4}
+  .rtext{display:inline-block;background:#f0ecff;color:#5b39e8;font-size:9.5px;font-weight:700;border-radius:4px;padding:0 4px;margin-right:4px;vertical-align:middle}
+</style>
+</head>
+<body>
+<div class="pageNote">
+  <!-- 文档头 -->
+  <div class="docHead">
+    <div class="logo">RD</div>
+    <div>
+      <h1>项目中心 v2 · 顶层规划可视化方案</h1>
+      <p>按《顶层项目中心规划方案.md》逐模块还原 · 11 个模块可交互原型 · 演示数据与真实项目水平一致</p>
+    </div>
+  </div>
+  <div class="docTabs" id="tabs">
+    <button data-m="0" class="on">① 主页面</button>
+    <button data-m="1">② 项目概览</button>
+    <button data-m="2">③ 设计说明</button>
+    <button data-m="3">④ 系统设计 · 点位录入</button>
+    <button data-m="4">⑤ 推导 + 推导规则</button>
+    <button data-m="5">⑥ 材料表</button>
+    <button data-m="6">⑦ 预算清单</button>
+    <button data-m="7">⑧ 概算清单</button>
+    <button data-m="8">⑨ 文档</button>
+    <button data-m="9">⑩ 版本</button>
+    <button data-m="10">⑪ 复盘</button>
+  </div>
+
+  <div class="wrap">
+    <!-- 侧边模块导航 -->
+    <aside class="side" id="side">
+      <div class="sec">① 主页面（项目列表）</div>
+      <a data-m="0" class="on"><span class="num">1</span><b>主页面</b></a>
+      <div class="sec2">②~⑪ 项目详情（点击列表打开）</div>
+      <a data-m="1"><span class="num">2</span><b>项目概览</b></a>
+      <a data-m="2"><span class="num">3</span><b>设计说明</b></a>
+      <a data-m="3"><span class="num">4</span><b>系统设计 · 点位</b></a>
+      <a data-m="4"><span class="num">5</span><b>推导 + 规则</b></a>
+      <a data-m="5"><span class="num">6</span><b>材料表</b></a>
+      <a data-m="6"><span class="num">7</span><b>预算清单</b></a>
+      <a data-m="7"><span class="num">8</span><b>概算清单</b></a>
+      <a data-m="8"><span class="num">9</span><b>文档</b></a>
+      <a data-m="9"><span class="num">10</span><b>版本</b></a>
+      <a data-m="10"><span class="num">11</span><b>复盘</b></a>
+    </aside>
+
+    <!-- 内容区 -->
+    <main class="main">
+      <!-- ================= ① 主页面 ================= -->
+      <section class="mod" id="m0">
+        <h2>① 项目中心 · 主页面 <span class="tag">模块 1 / 可照搬原方案 + 新增项目模版</span></h2>
+        <div class="desc">以项目为单位组织的内容，主页面照搬原方案，新增「项目模版」功能 —— <b style="color:#5b39e8">按业态配置与套用</b>：切换业态即联动展示该业态的模版集，可套用生成新项目；支持自定义新建模版 / 从当前项目生成模版。<b style="color:#5b39e8">点击列表中的项目名称打开进入 ②~⑪ 的项目详情模块。</b>「类型」列改为<b>业态</b>，支持<button class="btn sm" style="margin:0 4px;padding:0 8px" onclick="openDlg('dlg-format')">＋ 自定义业态</button>（随社会发展业态越来越多）。</div>
+        <div class="req">
+          <b>md 原文需求落地：</b>
+          <ul>
+            <li>以项目为单位组织的内容，主页面照搬原方案 → 列表 / 看板 / 已归档 / 系统 四个视图保留</li>
+            <li><span class="done">新增</span> 项目模版功能，<b>按业态（类型）配置与套用</b>：业态切换 → 模版列表联动；套用 → 新建项目自动带该业态 + 生成系统集与默认设计参数</li>
+            <li>主页面点击项目名称打开进入项目详情（②~⑪），可管理本项目所有数据：导出备份 / 导入备份 / 归档项目</li>
+            <li>「类型」列 → <b style="color:#5b39e8">「业态」</b>，下拉可选 + <b>自定义新增业态</b>（自由文本/存字典，新建与编辑弹窗演示）</li>
+            <li>全部表格承载自研 SortableTable 交互：列宽拖动 / 双击自适应 / Ctrl+←→ / 列拖拽换序 / 布局记忆 / 行拖拽排序（手柄 ⋮⋮）/ 列显隐；操作列：编辑 / 删除（弹窗二次确认，级联清空本项目全部数据）</li>
+          </ul>
+        </div>
+
+        <div class="bar" style="margin-bottom:14px">
+          <div class="seg">
+            <button class="on">进行中 <b class="mono">3</b></button>
+            <button>已归档 <b class="mono">1</b></button>
+            <button>系统</button>
+          </div>
+          <div class="sep2"></div>
+          <span class="search">苏州、园区、医院…</span>
+          <div class="seg" style="margin-left:6px"><button class="on">列表</button><button>看板</button></div>
+          <span style="flex:1"></span>
+          <button class="btn" onclick="openDlg('dlg-template')">▦ 项目模版</button>
+          <button class="btn pri" onclick="openDlg('dlg-newproj')">＋ 新建项目</button>
+        </div>
+
+        <div class="card">
+          <table>
+            <thead><tr>
+              <th style="width:22px"></th><th>项目编号</th><th>名称</th><th>业态</th><th>业主</th><th class="num">进度</th><th>状态</th><th class="num">更新时间</th><th>操作</th>
+            </tr></thead>
+            <tbody>
+              <tr>
+                <td><span class="rowHandle">⋮⋮</span></td>
+                <td class="mono accent">PJ-2026-001</td>
+                <td><b>苏州某公安项目</b><br><span class="faint" style="font-size:11px">打开 → ②~⑪ 模块演示</span></td>
+                <td class="muted">政府 · 公共安全</td>
+                <td class="muted">苏州市公安局</td>
+                <td class="num"><div class="progress" style="width:90px"><i style="width:78%"></i></div><span class="mono faint" style="font-size:10.5px">78%</span></td>
+                <td><span class="badge purple">设计中</span></td>
+                <td class="mono faint">08-29</td>
+                <td>
+                  <button class="btn sm" title="打开">→</button>
+                  <button class="btn sm" title="编辑">✎</button>
+                  <button class="btn sm" title="归档">▣</button>
+                  <button class="btn sm" title="删除" style="color:var(--danger)">🗑</button>
+                </td>
+              </tr>
+              <tr>
+                <td><span class="rowHandle">⋮⋮</span></td>
+                <td class="mono accent">PJ-2026-002</td>
+                <td><b>园区智慧楼宇</b></td>
+                <td class="muted">办公 · 智能楼宇</td>
+                <td class="muted">XX实业集团</td>
+                <td class="num"><div class="progress" style="width:90px"><i style="width:45%"></i></div><span class="mono faint" style="font-size:10.5px">45%</span></td>
+                <td><span class="badge blue">草稿</span></td>
+                <td class="mono faint">08-28</td>
+                <td><button class="btn sm">→</button><button class="btn sm">✎</button><button class="btn sm">▣</button><button class="btn sm" style="color:var(--danger)">🗑</button></td>
+              </tr>
+              <tr>
+                <td><span class="rowHandle">⋮⋮</span></td>
+                <td class="mono accent">PJ-2026-003</td>
+                <td><b>市人民医院扩建</b></td>
+                <td class="muted">医疗</td>
+                <td class="muted">市卫健委</td>
+                <td class="num"><div class="progress" style="width:90px"><i style="width:92%"></i></div><span class="mono faint" style="font-size:10.5px">92%</span></td>
+                <td><span class="badge green">已完成</span></td>
+                <td class="mono faint">08-26</td>
+                <td><button class="btn sm">→</button><button class="btn sm">✎</button><button class="btn sm">▣</button><button class="btn sm" style="color:var(--danger)">🗑</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="note">▲ 表格承载自研 SortableTable 交互：列宽拖动 / 双击自适应 / Ctrl+←→ / 列拖拽换序 / 布局记忆 / 行拖拽排序（手柄 ⋮⋮）/ 列显隐。操作列：编辑 / 删除（弹窗二次确认，级联清空本项目全部数据）/ 归档（两次点击确认）。</div>
+        <div class="bar" style="margin-top:12px">
+          <button class="btn" onclick="openDlg('dlg-backup')">⬇ 导出备份</button>
+          <button class="btn" onclick="openDlg('dlg-backup')">⬆ 导入备份</button>
+          <span class="faint" style="font-size:12px">备份为 .rdw.json 项目包，按 id 合并导入</span>
+        </div>
+      </section>
+
+      <!-- ================= ② 单项目概览 ================= -->
+      <section class="mod" id="m1" style="display:none">
+        <h2>② 项目概览（XXX项目 · 主页） <span class="tag">模块 1 / 去数据联动</span></h2>
+        <div class="desc">首先进入主页面可照搬原方案，但是<b style="color:var(--danger)">删除数据联动展示的内容及代码</b>；主页面有导出备份 / 导入备份 / 归档项目，可管理本项目所有数据。</div>
+        <div class="req">
+          <b>md 原文需求落地：</b>
+          <ul>
+            <li>照搬原方案布局（指标卡 / 摘要 / 子系统进度 / 近期任务 / 日程 / 文档）</li>
+            <li><span class="done">删除</span> 数据联动展示内容及代码（本演示无联动条）」</li>
+            <li>导出备份 / 导入备份 / 归档项目（右上工具条演示）</li>
+          </ul>
+        </div>
+
+        <!-- 项目头 -->
+        <div class="card" style="margin-bottom:14px">
+          <div class="cHead">
+            <b style="font-size:14px">苏州某公安项目</b>
+            <span class="mono faint" style="font-size:11px">PJ-2026-001</span>
+            <span class="badge purple">设计中</span>
+            <span class="badge gray">弱电 · 公共安全</span>
+            <div class="more">
+              <button class="btn sm" onclick="openDlg('dlg-backup')">⬇ 导出备份</button>
+              <button class="btn sm" onclick="openDlg('dlg-backup')">⬆ 导入备份</button>
+              <button class="btn sm">▣ 归档项目</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="kpis">
+          <div class="kpi"><div class="k">项目自动进度</div><div class="v">78<em>%</em></div><div class="s">系统 50% + 任务 30% + 清单预算 20%</div></div>
+          <div class="kpi"><div class="k">子系统</div><div class="v">5</div><div class="s">4 个设计中 · 1 个已完成</div></div>
+          <div class="kpi"><div class="k">点位总数</div><div class="v">1,284</div><div class="s">前端设备 912 · 终端 372</div></div>
+          <div class="kpi"><div class="k">概算总额</div><div class="v">¥362,888</div><div class="s">已确认版本 · 未生成则不显示</div></div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:5fr 7fr;gap:14px">
+          <div class="card">
+            <div class="cHead">项目摘要 <span class="faint mono" style="font-weight:400">4 项</span></div>
+            <div class="cBody" style="font-size:12.5px">
+              <div style="display:flex;justify-content:space-between;padding:3px 0"><span class="muted">业主</span><b>苏州市公安局</b></div>
+              <div style="display:flex;justify-content:space-between;padding:3px 0"><span class="muted">建筑面积</span><b>28,600 ㎡</b></div>
+              <div style="display:flex;justify-content:space-between;padding:3px 0"><span class="muted">层数</span><b>12 层</b></div>
+              <div style="display:flex;justify-content:space-between;padding:3px 0"><span class="muted">设计阶段</span><b>施工图</b></div>
+              <div style="display:flex;justify-content:space-between;padding:3px 0"><span class="muted">默认档次</span><b>标准型</b></div>
+              <div style="display:flex;justify-content:space-between;padding:3px 0"><span class="muted">计划周期</span><b>2026-06 ~ 2026-12</b></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="cHead">子系统进度 <span class="faint mono" style="font-weight:400">5</span> <span class="more"><button class="btn sm">＋ 添加系统</button></span></div>
+            <div class="cBody">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+                <span class="mono faint" style="font-size:10.5px">VSS</span><b style="font-size:13px;width:86px">视频监控</b>
+                <span class="badge purple">设计中</span>
+                <div class="progress" style="flex:1"><i style="width:86%"></i></div><span class="mono" style="font-size:11px">86%</span>
+                <span class="mono" style="font-size:11.5px;color:var(--accent)">概算 ¥157,240</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+                <span class="mono faint" style="font-size:10.5px">ACS</span><b style="font-size:13px;width:86px">门禁管理</b>
+                <span class="badge purple">设计中</span>
+                <div class="progress" style="flex:1"><i style="width:64%"></i></div><span class="mono" style="font-size:11px">64%</span>
+                <span class="mono" style="font-size:11.5px;color:var(--accent)">概算 ¥86,420</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+                <span class="mono faint" style="font-size:10.5px">NET</span><b style="font-size:13px;width:86px">信息网络</b>
+                <span class="badge purple">设计中</span>
+                <div class="progress" style="flex:1"><i style="width:72%"></i></div><span class="mono" style="font-size:11px">72%</span>
+                <span class="mono" style="font-size:11.5px;color:var(--accent)">概算 ¥58,700</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+                <span class="mono faint" style="font-size:10.5px">PABX</span><b style="font-size:13px;width:86px">公共广播</b>
+                <span class="badge purple">设计中</span>
+                <div class="progress" style="flex:1"><i style="width:50%"></i></div><span class="mono" style="font-size:11px">50%</span>
+                <span class="mono" style="font-size:11.5px;color:var(--accent)">概算 ¥32,880</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+                <span class="mono faint" style="font-size:10.5px">BA</span><b style="font-size:13px;width:86px">楼宇自控</b>
+                <span class="badge green">已完成</span>
+                <div class="progress" style="flex:1"><i style="width:100%"></i></div><span class="mono" style="font-size:11px">100%</span>
+                <span class="mono faint" style="font-size:11.5px">概算未生成</span>
+              </div>
+              <div class="note" style="margin-top:10px;background:#f4f1ff;border:1px solid #e2d8ff">▲ 每个子系统进度条后新增「概算 ¥金额」；该项目个子系统未生成概算时（如 楼宇自控），该处不显示金额。</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:14px">
+          <div class="card"><div class="cHead">近期任务 <span class="faint mono" style="font-weight:400">8</span></div><div class="cBody" style="font-size:12.5px">
+            <div style="display:flex;gap:8px;padding:4px 0"><input type="checkbox" class="chk"><span>完成点位复核与修正</span></div>
+            <div style="display:flex;gap:8px;padding:4px 0"><input type="checkbox" class="chk"><span class="muted">整理设备选型对比表</span></div>
+            <div style="display:flex;gap:8px;padding:4px 0"><input type="checkbox" class="chk" checked><span style="text-decoration:line-through;color:var(--faint)">收集品牌价目表</span></div>
+          </div></div>
+          <div class="card"><div class="cHead">近期日程</div><div class="cBody" style="font-size:12.5px">
+            <div style="padding:4px 0"><span class="badge gray">08-30</span> 弱电系统方案评审会</div>
+            <div style="padding:4px 0"><span class="badge gray">09-02</span> 现场机房勘察</div>
+          </div></div>
+          <div class="card"><div class="cHead">文档 <span class="faint mono" style="font-weight:400">6</span></div><div class="cBody" style="font-size:12.5px">
+            <div style="display:flex;gap:8px;padding:4px 0">📄 设计说明 · 视频监控 <span class="faint mono" style="margin-left:auto">v2</span></div>
+            <div style="display:flex;gap:8px;padding:4px 0">📄 会议纪要 · 评审会 <span class="faint mono" style="margin-left:auto">v1</span></div>
+          </div></div>
+        </div>
+      </section>
+
+      <!-- ================= ③ 设计说明 ================= -->
+      <section class="mod" id="m2" style="display:none">
+        <h2>③ 设计说明 <span class="tag">模块 2 / 全新建 · Word 导出</span></h2>
+        <div class="desc">按照子系统写设计说明，一个系统一个设计说明；加一个导出模块，直接将<b>所有设计说明汇总导出 Word</b>，要有<b>分级标题</b>设计。</div>
+        <div class="req">
+          <b>md 原文需求落地：</b>
+          <ul>
+            <li>按子系统一个设计说明（本页列出各系统卡片，可逐个编辑）</li>
+            <li>导出模块：汇总全部系统设计说明 → Word（.doc，WPS/Word 可打开）</li>
+            <li>导出含<b>分级标题</b>：项目名 → 系统 → 章节（设计依据 / 点位概况 / 推导结果 / 设计参数）</li>
+          </ul>
+        </div>
+        <div class="bar" style="justify-content:flex-end;margin-bottom:12px">
+          <button class="btn pri" onclick="openDlg('dlg-doc')">⬇ 导出全部设计说明 Word</button>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">
+          <div class="card">
+            <div class="cHead"><span class="mono faint" style="font-size:10.5px">VSS</span> 视频监控系统设计说明 <span class="badge green">已填写</span></div>
+            <div class="cBody" style="font-size:12px;color:var(--muted)">
+              1.1 设计依据：GB 50348…<br>
+              1.2 点位概况：点位 912 个 / 前端 486…<br>
+              1.3 推导结果：摄像机 486 台、NVR 12 台…<br>
+              1.4 设计参数：码流 4Mbps、存储 30 天…
+              <div style="margin-top:10px"><button class="btn sm">✏ 编辑设计说明</button></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="cHead"><span class="mono faint" style="font-size:10.5px">ACS</span> 门禁管理系统设计说明 <span class="badge purple">已填写</span></div>
+            <div class="cBody" style="font-size:12px;color:var(--muted)">
+              2.1 设计依据：GB 50396…<br>
+              2.2 点位概况：门禁点 240 个…<br>
+              2.3 推导结果：读卡器 240 台、控制器 20 台…
+              <div style="margin-top:10px"><button class="btn sm">✏ 编辑设计说明</button></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="cHead"><span class="mono faint" style="font-size:10.5px">NET</span> 信息网络系统设计说明 <span class="badge gray">未填写</span></div>
+            <div class="cBody" style="font-size:12px;color:var(--faint)">
+              尚未填写，点击按钮开始编写。<br><br>
+              <button class="btn sm">✏ 编写设计说明</button>
+            </div>
+          </div>
+        </div>
+        <div class="note">▼ 导出的 Word 分级标题结构（示例）：<br>
+          <code style="font-size:11.5px">&lt;H1&gt; 苏州某公安项目 设计说明 &nbsp;→&nbsp; &lt;H2&gt; 1 视频监控系统 &nbsp;→&nbsp; &lt;H3&gt; 1.1 设计依据 / 1.2 点位概况 / 1.3 推导结果 / 1.4 设计参数 &nbsp;→&nbsp; &lt;H4&gt; 点位清单表 / 设备数量表</code>，WPS/Word 自动生成目录。</div>
+      </section>
+
+      <!-- ================= ④ 系统设计 · 点位录入 ================= -->
+      <section class="mod" id="m3" style="display:none">
+        <h2>④ 系统设计 · 点位录入 <span class="tag">模块 3 / 项目级点表</span></h2>
+        <div class="desc">点位录入可照搬原子系统设计模块中的点位子模块，但本点表<b>不止一个系统，而是本项目所有系统进行录入</b>，支持<b>批量导入、批量新增、单个新增、导出 excel</b>。本点表的列字段为 <b>建筑、弱电间、设备名称、数量 + 操作列</b>，数据表需具备 <b>拖动调整列宽、按住拖动排序、勾选（全选）及删除</b>。</div>
+        <div class="req">
+          <b>md 原始行架构：</b>
+          <div class="mono" style="margin:6px 0 8px;background:#fff;padding:8px 12px;border-radius:6px;border:1px dashed #d8d8ea;line-height:1.9">
+            ├─ 视频监控系统 &nbsp;→（本表按系统分组，组内即各点位行：建筑 / 弱电间 / 设备名称 / 数量）
+          </div>
+          <ul>
+            <li><span class="done">支持</span> 批量导入（CSV/Excel 矩阵 + 下载模板）</li>
+            <li><span class="done">支持</span> 批量新增 / 单个新增（选择所属系统）</li>
+            <li><span class="done">支持</span> 导出 Excel（分系统 Sheet + 汇总）</li>
+            <li><span class="done">支持</span> 列宽拖动调整 / 按住拖动排序 / 勾选（全选）/ 删除</li>
+          </ul>
+        </div>
+
+        <div class="bar" style="margin-bottom:12px">
+          <div class="seg">
+            <button class="on">全部系统 <b class="mono">3</b></button>
+            <button>视频监控</button>
+            <button>门禁管理</button>
+            <button>信息网络</button>
+          </div>
+          <span class="search">建筑、设备名称…</span>
+          <span style="flex:1"></span>
+          <button class="btn" onclick="openDlg('dlg-point-import')">⇧ 批量导入</button>
+          <button class="btn" onclick="openDlg('dlg-point-batch')">＋＋ 批量新增</button>
+          <button class="btn" onclick="openDlg('dlg-point-add')">＋ 单个新增</button>
+          <button class="btn" onclick="openDlg('dlg-point-export')">⇩ 导出 Excel</button>
+        </div>
+
+        <div class="tb-tip">交互演示：勾选行 → 底部出现「删除所选 (n)」按钮；拖动列头右缘可调列宽；拖动行左侧 ⋮⋮ 手柄可排序（持久化）；表头 ☑ 为全选。</div>
+
+        <div class="alerts">
+          <span class="pill" style="border-color:#e8b7b7;color:var(--danger)">已选 2 个点位 · 批量删除可恢复历史快照</span>
+          <span class="pill">共 1,284 点 · 视频监控 912 · 门禁 240 · 信息网络 132</span>
+        </div>
+
+        <!-- 系统面板 1：视频监控 -->
+        <div class="sysPanel">
+          <div class="sysHead open">
+            <span class="caret">▶</span>
+            <span class="badge purple">VSS</span> 视频监控系统
+            <span class="cnt">912 个点位</span>
+            <span class="money"></span>
+          </div>
+          <table>
+            <thead><tr>
+              <th style="width:34px"><input type="checkbox" class="chk" checked></th>
+              <th>建筑</th><th>弱电间</th><th>设备名称</th><th class="num">数量</th><th style="width:120px">操作</th>
+            </tr></thead>
+            <tbody>
+              <tr>
+                <td><input type="checkbox" class="chk" checked></td><td><span class="rowHandle">⋮⋮</span>A栋</td><td class="muted">1F-IDF</td>
+                <td><b>高清枪型摄像机</b> <span class="badge gray" style="margin-left:6px">VSS-QD-001</span></td><td class="num">486</td>
+                <td><button class="btn sm">复制</button> <button class="btn sm" style="color:var(--danger)">删除</button></td>
+              </tr>
+              <tr>
+                <td><input type="checkbox" class="chk" checked></td><td>A栋</td><td class="muted">2F-IDF</td>
+                <td>红外半球摄像机 <span class="badge gray" style="margin-left:6px">VSS-BQ-002</span></td><td class="num">216</td>
+                <td><button class="btn sm">复制</button> <button class="btn sm" style="color:var(--danger)">删除</button></td>
+              </tr>
+              <tr>
+                <td><input type="checkbox" class="chk"></td><td>B栋</td><td class="muted">3F-IDF</td>
+                <td>球型摄像机 <span class="badge gray" style="margin-left:6px">VSS-QX-003</span></td><td class="num">98</td>
+                <td><button class="btn sm">复制</button> <button class="btn sm" style="color:var(--danger)">删除</button></td>
+              </tr>
+              <tr>
+                <td><input type="checkbox" class="chk"></td><td>B栋</td><td class="muted">1F-IDF</td>
+                <td>视频存储服务器 <span class="badge gray">VSS-CF-004</span></td><td class="num">6</td>
+                <td><button class="btn sm">复制</button> <button class="btn sm" style="color:var(--danger)">删除</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- 系统面板 2：门禁 -->
+        <div class="sysPanel">
+          <div class="sysHead">
+            <span class="caret">▶</span>
+            <span class="badge blue">ACS</span> 门禁管理系统
+            <span class="cnt">240 个点位</span>
+          </div>
+          <table style="display:none"><tbody><tr><td class="muted">点击展开</td></tr></tbody></table>
+        </div>
+        <div class="sysPanel">
+          <div class="sysHead">
+            <span class="caret">▶</span>
+            <span class="badge blue">NET</span> 信息网络系统
+            <span class="cnt">132 个点位</span>
+          </div>
+          <table style="display:none"><tbody><tr><td class="muted">点击展开</td></tr></tbody></table>
+        </div>
+
+        <div class="note">▲ 行架构 = 系统面板（折叠）→ 点位行（建筑 / 弱电间 / 设备名称 / 数量）。点位归属于各子系统（project_system_id），本项目级点表在 UI 层聚合展示，无需改动数据模型。设备编码来自设备中心，点选「设备名称」可与设备中心双向联动。</div>
+      </section>
+
+      <!-- ================= ⑤ 推导 + 推导规则 ================= -->
+      <section class="mod" id="m4" style="display:none">
+        <h2>⑤ 推导 + 推导规则 <span class="tag">模块 4</span></h2>
+        <div class="desc">按规则（公式快照）从点位推导设备数量，包含<b>设备中心的设备 + 数量逻辑 + 单点定额材料</b>。</div>
+        <div class="req">
+          <b>md 原文需求落地：</b>
+          <ul>
+            <li>按规则（公式快照）从点位推导设备数量</li>
+            <li>推导来源：设备中心设备（前端/终端） + 数量逻辑（点位×系数/固定值） + 单点定额材料（线缆/管材/辅材）</li>
+            <li>执行后落库 design_results，供材料表 / 预算 / 概算使用</li>
+          </ul>
+        </div>
+        <div class="bar" style="margin-bottom:14px">
+          <span class="pill">推导引擎：DesignEngine（纯函数）</span>
+          <span style="flex:1"></span>
+          <button class="btn pri" onclick="toast('已执行推导：5 个系统全部完成，共生成 214 条结果')">▶ 执行推导（本项目全部系统）</button>
+        </div>
+
+        <div class="card">
+          <div class="cHead">推导结果 · 按系统 <span class="faint mono" style="font-weight:400">5 系统 / 214 条</span></div>
+        </div>
+        <div class="sysPanel" style="margin-top:12px">
+          <div class="sysHead open"><span class="caret">▶</span><b>视频监控系统</b><span class="cnt">42 条结果</span></div>
+          <table>
+            <thead><tr><th>类别</th><th>项</th><th class="num">计算数量</th><th>公式快照</th><th>规则</th></tr></thead>
+            <tbody>
+              <tr><td><span class="badge purple">前端设备</span></td><td>高清枪型摄像机</td><td class="num">486</td><td class="mono muted">点位数量 × 1</td><td class="mono faint">VSS-前端-摄像机</td></tr>
+              <tr><td><span class="badge purple">前端设备</span></td><td>红外半球摄像机</td><td class="num">216</td><td class="mono muted">点位数量 × 1</td><td class="mono faint">VSS-前端-摄像机</td></tr>
+              <tr><td><span class="badge blue">终端设备</span></td><td>NVR 视频存储服务器</td><td class="num">12</td><td class="mono muted">枪型 + 半球 + 球型 → 32 路/台 → round(÷32)</td><td class="mono faint">VSS-终端-NVR</td></tr>
+              <tr><td><span class="badge green">管材线缆</span></td><td>CAT6 网线</td><td class="num">58,320</td><td class="mono muted">Σ点位 × 单点定额 60m</td><td class="mono faint">定额-VSS-CABLE</td></tr>
+              <tr><td><span class="badge gray">辅材</span></td><td>金属桥架</td><td class="num">1,820</td><td class="mono muted">Σ点位 × 单点定额 1.5m</td><td class="mono faint">定额-VSS-AUX</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card" style="margin-top:14px">
+          <div class="cHead">本系统生效规则（可按系统展开全部） <span class="more"><button class="btn sm">＋ 打开规则编辑器</button></span></div>
+          <div class="cBody" style="font-size:12.5px">
+            <div style="display:flex;gap:12px;padding:6px 0;border-bottom:1px solid #f0f0f7">
+              <span class="badge gray">优先级 1</span><b>摄像机数量</b>
+              <span class="muted">条件：点位类型=摄像机 → 数量 = Σ点位数量</span>
+              <span class="mono faint" style="margin-left:auto">VSS-前端-摄像机</span>
+            </div>
+            <div style="display:flex;gap:12px;padding:6px 0;border-bottom:1px solid #f0f0f7">
+              <span class="badge gray">优先级 2</span><b>NVR 数量</b>
+              <span class="muted">条件：前端总数 >0 → 数量 = ceil(Σ前端/32路)</span>
+              <span class="mono faint" style="margin-left:auto">VSS-终端-NVR</span>
+            </div>
+            <div style="display:flex;gap:12px;padding:6px 0">
+              <span class="badge gray">优先级 9</span><b>网线长度</b>
+              <span class="muted">条件：无 → 数量 = Σ点位 × 60m/点</span>
+              <span class="mono faint" style="margin-left:auto">定额-VSS-CABLE</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= ⑥ 材料表 ================= -->
+      <section class="mod" id="m5" style="display:none">
+        <h2>⑥ 材料表 <span class="tag">模块 5 / 复用清单链路</span></h2>
+        <div class="desc">是推导模块生成的材料表，列字段为<b>设备名称、通用参数、单位、数量、备注</b>；行架构为 系统 → 前端设备 / 终端设备 / 管材线缆 / 辅材 / 其他。数据表同样具备列宽拖、拖排序、勾选、删除。<b style="color:#5b39e8">「设备名称」链接设备中心，「通用参数」按设备名称取设备中心的通用参数富文本。</b></div>
+        <div class="req">
+          <b>md 原始行架构：</b>
+          <div class="mono" style="margin:6px 0 8px;background:#fff;padding:8px 12px;border-radius:6px;border:1px dashed #d8d8ea;line-height:1.7">
+            ├─ 视频监控系统<br>│&nbsp;&nbsp;├─ 前端设备 / 终端设备 / 管材线缆 / 辅材 / 其他
+          </div>
+          <ul>
+            <li>数据源：清单（BillService.generateProject）最新版本，无版本一键生成</li>
+            <li>列宽拖动 / 按住拖排序 / 勾选（全选）/ 删除 —— 演示</li>
+            <li><span class="done">支持</span> 双模式 Excel 导出：整表分组（1 主 Sheet + 汇总） / 分系统（每系统 1 Sheet + 汇总）</li>
+            <li><span class="done">联动</span>「通用参数」= 设备名称 → 设备中心 Product.specification 富文本内容（未配置设备则显示 —）</li>
+          </ul>
+        </div>
+
+        <div class="bar" style="margin-bottom:12px">
+          <span class="pill">版本 <b>V3</b> <span class="badge green">已确认</span></span>
+          <button class="btn sm">⇄ 切换版本</button>
+          <span style="flex:1"></span>
+          <button class="btn" onclick="toast('已重新生成材料版本 V4（草稿）')">⟳ 重新生成材料表</button>
+          <button class="btn" onclick="openDlg('dlg-export')">⇩ Excel 整表分组</button>
+          <button class="btn" onclick="openDlg('dlg-export')">⇩ Excel 分系统</button>
+          <button class="btn pri" onclick="openDlg('dlg-export')">⇩ 导出 Excel</button>
+        </div>
+
+        <div class="sysPanel">
+          <div class="sysHead open"><span class="caret">▶</span><b>视频监控系统</b><span class="cnt">23 项</span></div>
+          <table>
+            <thead><tr>
+              <th style="width:34px"><input type="checkbox" class="chk"></th>
+              <th>设备名称</th><th>通用参数</th><th style="width:70px">单位</th><th class="num" style="width:80px">数量</th><th>备注</th><th style="width:110px">操作</th>
+            </tr></thead>
+            <tbody>
+              <tr class="groupRow"><td colspan="7">&nbsp;◆ 前端设备</td></tr>
+              <tr><td><input type="checkbox" class="chk"></td><td><button class="link" onclick="openDlg('dlg-spec')">🔗 高清枪型摄像机</button></td><td class="muted"><span class="rtext">通用参数</span>* 200万像素 / H.265 / 4M码流…</td><td>台</td><td class="num">486</td><td class="faint">国标</td><td><button class="btn sm">✎</button> <button class="btn sm" style="color:var(--danger)">删除</button></td></tr>
+              <tr><td><input type="checkbox" class="chk"></td><td><button class="link" onclick="openDlg('dlg-spec')">红外半球摄像机</button></td><td class="muted"><span class="rtext">通用参数</span>* 200万像素 / 夜视 30m…</td><td>台</td><td class="num">216</td><td class="faint">—</td><td><button class="btn sm">✎</button> <button class="btn sm" style="color:var(--danger)">删除</button></td></tr>
+              <tr class="groupRow"><td colspan="7">&nbsp;◆ 终端设备</td></tr>
+              <tr><td><input type="checkbox" class="chk"></td><td>NVR 存储服务器</td><td class="muted">32路 / 支持RAID</td><td>台</td><td class="num">12</td><td class="faint">—</td><td><button class="btn sm">✎</button> <button class="btn sm" style="color:var(--danger)">删除</button></td></tr>
+              <tr class="groupRow"><td colspan="7">&nbsp;◆ 管材线缆</td></tr>
+              <tr><td><input type="checkbox" class="chk"></td><td>CAT6 网线</td><td class="muted">六类非屏蔽</td><td>m</td><td class="num">58,320</td><td class="faint">定额 60m/点</td><td><button class="btn sm">✎</button> <button class="btn sm" style="color:var(--danger)">删除</button></td></tr>
+              <tr class="groupRow"><td colspan="7">&nbsp;◆ 辅材</td></tr>
+              <tr><td><input type="checkbox" class="chk"></td><td>金属桥架 100×50</td><td class="muted">热镀锌</td><td>m</td><td class="num">1,820</td><td class="faint">定额 1.5m/点</td><td><button class="btn sm">✎</button> <button class="btn sm" style="color:var(--danger)">删除</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="note">▲ 材料表 = 清单版本明细（系统 → 五区）。行内可编辑数量/单价（手工调整闭环），重新生成保留手工调整行。顶部筛选条 + 系统折叠 + 分区小计与合计。<br>🔗 设备名称链接设备中心；「通用参数 *」= 设备中心该设备的通用参数富文本内容（Product.specification，表格内可展开预览）。</div>
+      </section>
+
+      <!-- ================= ⑦ 预算清单 ================= -->
+      <section class="mod" id="m6" style="display:none">
+        <h2>⑦ 预算清单 <span class="tag">模块 6 / 智能选型</span></h2>
+        <div class="desc">根据推导生成的材料表，然后增加<b>智能选型功能</b>，根据设备中心的设备档次选型，匹配上选用的<b>品牌、型号、详细参数、单价、金额、备注</b>。列字段为 <b>设备名称、通用参数、单位、数量、档次、品牌、型号、详细参数、单价、金额、备注</b>。行架构每系统显示 <b>预算合计金额</b>。<b style="color:#5b39e8">「通用参数」链接设备中心通用参数富文本；「详细参数」按选用档次的品牌型号链接设备中心详细参数富文本。</b></div>
+        <div class="req">
+          <b>md 原文需求落地：</b>
+          <ul>
+            <li>在材料表基础上智能选型（设备中心档次 → 品牌 / 型号 / 详细参数 / 单价 / 金额）</li>
+            <li>列：设备名称 / 通用参数 / 单位 / 数量 / <b>档次 / 品牌 / 型号 / 详细参数</b> / 单价 / 金额 / 备注</li>
+            <li><span class="done">联动</span>「通用参数」= 设备中心 Product.specification 富文本；「详细参数」= 所选档次的品牌型号 → ProductModel.detail_html 富文本</li>
+            <li>系统头显示 <b>预算合计金额：？元</b></li>
+            <li>列宽拖 / 拖排序 / 勾选 / 删除 同样到位</li>
+          </ul>
+        </div>
+
+        <div class="priceBd"><b>系统头合计展示：</b>「视频监控系统 ———— 预算合计金额：¥157,240 元」；选中行合计浮动提示。</div>
+
+        <!-- 智能选型工具条 -->
+        <div class="card" style="margin-bottom:12px">
+          <div class="cBody">
+            <div class="bar">
+              <b style="font-size:12.5px;color:var(--muted)">智能选型</b>
+              <button class="btn sm " onclick="toast('已按经济型整项目重算选型')" style="border-color:#e3d26f;background:#fffdf4">经济型 <span class="faint">整项目</span></button>
+              <button class="btn sm" onclick="toast('已按标准型整项目重算选型')" style="border-color:var(--accent);color:var(--accent);background:#f0ecff">标准型 <span class="faint">整项目</span></button>
+              <button class="btn sm" onclick="toast('已按高端型整项目重算选型')">高端型 <span class="faint">整项目</span></button>
+              <span class="badge purple">当前选型：标准型</span>
+              <span class="faint" style="font-size:11px">|</span>
+              <select style="border:1px solid var(--rule);border-radius:6px;padding:4px 8px;font-size:12px">
+                <option>标准型</option><option>经济型</option><option>高端型</option>
+              </select>
+              <select style="border:1px solid var(--rule);border-radius:6px;padding:4px 8px;font-size:12px">
+                <option>全部系统</option><option>视频监控</option><option>门禁管理</option>
+              </select>
+              <button class="btn sm">应用到该系统</button>
+              <span style="flex:1"></span>
+              <button class="btn pri sm" onclick="openDlg('dlg-versions')">⚡ 确认生成清单（V4）</button>
+            </div>
+            <div class="note" style="margin-top:10px;font-size:11.5px">换档即按所选档次重算 品牌/型号/单价/金额（不重跑推导）；确认生成清单 → 固化当前选型为清单版本 + 同步生成预算。</div>
+          </div>
+        </div>
+
+        <div class="kpis" style="margin-top:0;grid-template-columns:repeat(4,1fr)">
+          <div class="kpi"><div class="k">预算总额</div><div class="v">¥364,500</div><div class="s">标准型 · 当前版本</div></div>
+          <div class="kpi"><div class="k">经济型对比</div><div class="v">¥302,800</div><div class="s">↓ 16.9%</div></div>
+          <div class="kpi"><div class="k">高端型对比</div><div class="v">¥428,600</div><div class="s">↑ 17.6%</div></div>
+          <div class="kpi"><div class="k">目标预算</div><div class="v">¥350,000</div><div class="s">可编辑 · 超支提醒</div></div>
+        </div>
+
+        <div class="sysPanel">
+          <div class="sysHead open">
+            <span class="caret">▶</span><b>视频监控系统</b><span class="cnt">23 项</span>
+            <span class="money">预算合计金额：¥157,240 元</span>
+          </div>
+          <table>
+            <thead><tr>
+              <th style="width:30px"><input type="checkbox" class="chk"></th>
+              <th>设备名称</th><th>通用参数</th><th>单位</th><th class="num">数量</th>
+              <th>档次</th><th>品牌</th><th>型号</th><th>详细参数</th>
+              <th class="num">单价</th><th class="num">金额</th><th>备注</th>
+            </tr></thead>
+            <tbody>
+              <tr class="groupRow"><td colspan="12">&nbsp;◆ 前端设备</td></tr>
+              <tr>
+                <td><input type="checkbox" class="chk"></td>
+                <td><button class="link" onclick="openDlg('dlg-spec')">🔗 高清枪型摄像机</button></td><td class="muted"><span class="rtext">通用参数</span>* 200万像素…</td><td>台</td><td class="num">486</td>
+                <td><span class="badge purple">标准</span></td><td>海康威视</td><td class="mono"><button class="link" onclick="openDlg('dlg-detail')">DS-2CD2T4XYZ</button></td><td class="muted"><span class="rtext">详细参数</span>* H.265 · 4MP · 红外50m…</td>
+                <td class="num">¥224.00</td><td class="num"><b>¥108,864</b></td><td class="faint">国标入围</td>
+              </tr>
+              <tr>
+                <td><input type="checkbox" class="chk"></td>
+                <td><button class="link" onclick="openDlg('dlg-spec')">红外半球摄像机</button></td><td class="muted"><span class="rtext">通用参数</span>* 200万像素…</td><td>台</td><td class="num">216</td>
+                <td><span class="badge purple">标准</span></td><td>海康威视</td><td class="mono"><button class="link" onclick="openDlg('dlg-detail')">DS-2CD2325</button></td><td class="muted"><span class="rtext">详细参数</span>* 夜视 30m…</td>
+                <td class="num">¥186.00</td><td class="num"><b>¥40,176</b></td><td class="faint">—</td>
+              </tr>
+              <tr class="groupRow"><td colspan="12">&nbsp;◆ 终端设备</td></tr>
+              <tr>
+                <td><input type="checkbox" class="chk"></td>
+                <td><button class="link" onclick="openDlg('dlg-spec')">NVR 存储服务器</button></td><td class="muted"><span class="rtext">通用参数</span>* 32路…</td><td>台</td><td class="num">12</td>
+                <td><span class="badge purple">标准</span></td><td>海康威视</td><td class="mono"><button class="link" onclick="openDlg('dlg-detail')">DS-9632NXI</button></td><td class="muted"><span class="rtext">详细参数</span>* RAID · 4盘位…</td>
+                <td class="num">¥6,800.00</td><td class="num"><b>¥81,600</b></td><td class="faint">—</td>
+              </tr>
+              <tr class="groupRow"><td colspan="12">&nbsp;◆ 管材线缆</td></tr>
+              <tr>
+                <td><input type="checkbox" class="chk"></td>
+                <td>CAT6 网线</td><td class="muted">六类</td><td>m</td><td class="num">58,320</td>
+                <td><span class="badge purple">标准</span></td><td>普天</td><td class="mono">PTH-6E</td><td class="muted">0.5mm 无氧铜</td>
+                <td class="num">¥2.60</td><td class="num"><b>¥151,632</b></td><td class="faint">—</td>
+              </tr>
+            </tbody>
+          </table>
+          <div style="padding:8px 12px;border-top:1px solid var(--rule);text-align:right;font-size:12px;color:var(--muted)">
+            前端 <b class="mono">¥149,040</b> · 终端 <b class="mono">¥81,600</b> · 管材线缆 <b class="mono">¥151,632</b> · 辅材 <b class="mono">¥22,568</b> · 其他 <b class="mono">¥0</b>
+          </div>
+        </div>
+
+        <div class="sysPanel" style="margin-top:12px">
+          <div class="sysHead"><span class="caret">▶</span><b>门禁管理系统</b><span class="cnt">14 项</span><span class="money">预算合计金额：¥86,420 元</span></div>
+        </div>
+
+        <div class="bar" style="margin-top:12px">
+          <button class="btn" onclick="openDlg('dlg-export')">⇩ Excel 整表分组（全部系统 1 Sheet + 汇总）</button>
+          <button class="btn" onclick="openDlg('dlg-export')">⇩ Excel 分系统（每系统 1 Sheet + 汇总）</button>
+        </div>
+      </section>
+
+      <!-- ================= ⑧ 概算清单 ================= -->
+      <section class="mod" id="m7" style="display:none">
+        <h2>⑧ 概算清单 <span class="tag">模块 7 / 预算成果</span></h2>
+        <div class="desc">是根据预算清单经过智能选型后生成的概算清单，列字段为 <b>设备名称、通用参数、单位、数量、备注、品牌、型号、详细参数、单价、金额、备注</b>；行架构每系统显示 <b>理论上限合计金额</b>（方案原文标注预算合计金额，语义为系统造价）。<b style="color:#5b39e8">「通用参数」链接设备中心通用参数富文本；「详细参数」按档次品牌型号链接设备中心详细参数富文本。</b></div>
+        <div class="req">
+          <b>md 原文需求落地：</b>
+          <ul>
+            <li>预算清单 → 智能选型 → 概算清单（同一数据链路，已确认版本只读）</li>
+            <li>列序：设备名称 / 通用参数 / 单位 / 数量 / <b>备注</b> / 品牌 / 型号 / 详细参数 / 单价 / 金额 / 备注</li>
+            <li><span class="done">联动</span>「通用参数」= 设备中心 Product.specification 富文本；「详细参数」= 所选档次的品牌型号 → ProductModel.detail_html 富文本（与材料表 / 预算清单一致）</li>
+            <li>系统头合计金额；只读，禁止行内编辑</li>
+            <li><span class="done">支持</span> 双模式 Excel 导出（与材料表 / 预算清单一致）：整表分组 / 分系统</li>
+          </ul>
+        </div>
+        <div class="bar" style="margin-bottom:12px">
+          <span class="pill">概算基于：<b>预算清单 V3（已确认）</b></span>
+          <button class="btn sm" onclick="openDlg('dlg-versions')">⇄ 切换概算版本</button>
+          <span style="flex:1"></span>
+          <button class="btn" onclick="openDlg('dlg-export')">⇩ Excel 整表分组</button>
+          <button class="btn" onclick="openDlg('dlg-export')">⇩ Excel 分系统</button>
+          <button class="btn pri" onclick="openDlg('dlg-export')">⇩ 导出概算 Excel</button>
+        </div>
+
+        <div class="kpis" style="margin-top:0;grid-template-columns:repeat(3,1fr)">
+          <div class="kpi"><div class="k">概算总额（V3 已确认）</div><div class="v">¥364,500</div></div>
+          <div class="kpi"><div class="k">概算单价合计</div><div class="v">¥362,888</div><div class="s">选型后按 品牌+型号 定价</div></div>
+          <div class="kpi"><div class="k">与预算差额</div><div class="v ok">-¥1,612</div><div class="s">说明：定额材料价差</div></div>
+        </div>
+
+        <div class="sysPanel">
+          <div class="sysHead open"><span class="caret">▶</span><b>视频监控系统</b><span class="cnt">23 项</span><span class="money">合计金额：¥157,240 元</span></div>
+          <table>
+            <thead><tr>
+              <th>设备名称</th><th>通用参数</th><th>单位</th><th class="num">数量</th><th>备注</th>
+              <th>品牌</th><th>型号</th><th>详细参数</th><th class="num">单价</th><th class="num">金额</th><th>备注</th>
+            </tr></thead>
+            <tbody>
+              <tr class="groupRow"><td colspan="11">&nbsp;◆ 前端设备</td></tr>
+              <tr>
+                <td><button class="link" onclick="openDlg('dlg-spec')">🔗 高清枪型摄像机</button></td><td class="muted"><span class="rtext">通用参数</span>* 200万像素…</td><td>台</td><td class="num">486</td><td class="faint">国标</td>
+                <td>海康威视</td><td class="mono"><button class="link" onclick="openDlg('dlg-detail')">DS-2CD2T4XYZ</button></td><td class="muted"><span class="rtext">详细参数</span>* H.265…</td>
+                <td class="num">¥224.00</td><td class="num"><b>¥108,864</b></td><td class="faint">—</td>
+              </tr>
+              <tr>
+                <td><button class="link" onclick="openDlg('dlg-spec')">红外半球摄像机</button></td><td class="muted"><span class="rtext">通用参数</span>* 200万像素…</td><td>台</td><td class="num">216</td><td class="faint">—</td>
+                <td>海康威视</td><td class="mono"><button class="link" onclick="openDlg('dlg-detail')">DS-2CD2325</button></td><td class="muted"><span class="rtext">详细参数</span>* 夜视30m…</td>
+                <td class="num">¥186.00</td><td class="num"><b>¥40,176</b></td><td class="faint">—</td>
+              </tr>
+              <tr class="groupRow"><td colspan="11">&nbsp;◆ 终端设备</td></tr>
+              <tr>
+                <td><button class="link" onclick="openDlg('dlg-spec')">NVR 存储服务器</button></td><td class="muted"><span class="rtext">通用参数</span>* 32路…</td><td>台</td><td class="num">12</td><td class="faint">—</td>
+                <td>海康威视</td><td class="mono"><button class="link" onclick="openDlg('dlg-detail')">DS-9632NXI</button></td><td class="muted"><span class="rtext">详细参数</span>* RAID…</td>
+                <td class="num">¥6,800.00</td><td class="num"><b>¥81,600</b></td><td class="faint">—</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="note">▲ 概算清单 = 已确认预算清单的只读快照。列「备注」出现两次为方案原文如此（前置为导入备注，后置为选型备注），实现时按原文保留两列。</div>
+      </section>
+
+      <!-- ================= ⑨ 文档 ================= -->
+      <section class="mod" id="m8" style="display:none">
+        <h2>⑨ 文档模块 <span class="tag">模块 8 / 可照搬原方案</span></h2>
+        <div class="desc">可照搬原方案：项目文档轻量 CRUD（设计说明 / 设备表 / 会议纪要 / 普通笔记），富文本在知识模块接入。</div>
+        <div class="bar" style="justify-content:flex-end;margin-bottom:12px">
+          <button class="btn pri" onclick="openDlg('dlg-newdoc')">＋ 新增文档</button>
+        </div>
+        <div class="card">
+          <table>
+            <thead><tr><th>标题</th><th>类型</th><th>版本</th><th>状态</th><th>更新时间</th><th class="num">操作</th></tr></thead>
+            <tbody>
+              <tr><td><b>设计说明 · 视频监控系统</b></td><td><span class="badge purple">设计说明</span></td><td class="mono muted">v2</td><td class="muted">定稿</td><td class="mono faint">2026-08-28</td><td class="num"><button class="btn sm">✎</button> <button class="btn sm" style="color:var(--danger)">🗑</button></td></tr>
+              <tr><td>设备表 · 门禁</td><td><span class="badge blue">设备表</span></td><td class="mono muted">v1</td><td class="muted">草稿</td><td class="mono faint">2026-08-26</td><td class="num"><button class="btn sm">✎</button> <button class="btn sm" style="color:var(--danger)">🗑</button></td></tr>
+              <tr><td>会议纪要 · 方案评审</td><td><span class="badge gray">会议纪要</span></td><td class="mono muted">v1</td><td class="muted">草稿</td><td class="mono faint">2026-08-25</td><td class="num"><button class="btn sm">✎</button> <button class="btn sm" style="color:var(--danger)">🗑</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ================= ⑩ 版本 ================= -->
+      <section class="mod" id="m9" style="display:none">
+        <h2>⑩ 版本模块 <span class="tag">模块 9 / 富化对比</span></h2>
+        <div class="desc">可照搬原方案，发散思维使其更丰富 —— 原本的版本对比思路很粗糙。本演示：版本时间线 + 清单版本差异对比（统计卡 / 按系统分组 / 筛选）。</div>
+        <div class="req">
+          <b>md 原文需求落地：</b>
+          <ul>
+            <li>保留点位修订时间线（增删改自动快照）</li>
+            <li><span class="done">富化</span> 清单版本对比：统计卡（新增/移除/量变/价变/金额增量）</li>
+            <li><span class="done">富化</span> 按系统分组对比 + 变化项筛选</li>
+          </ul>
+        </div>
+        <div class="bar" style="margin-bottom:12px">
+          <span class="pill">对比版本：<b>V2</b> → <b>V4</b></span>
+          <button class="btn sm">⇄ 切换</button>
+          <span style="flex:1"></span>
+          <div class="seg">
+            <button class="on">清单版本对比</button>
+            <button>点位修订时间线</button>
+          </div>
+        </div>
+
+        <div class="kpis" style="margin-top:0;grid-template-columns:repeat(5,1fr)">
+          <div class="kpi"><div class="k">新增项</div><div class="v ok">+6</div></div>
+          <div class="kpi"><div class="k">移除项</div><div class="v danger">-2</div></div>
+          <div class="kpi"><div class="k">数量变化</div><div class="v">4</div></div>
+          <div class="kpi"><div class="k">单价变化</div><div class="v">3</div></div>
+          <div class="kpi"><div class="k">金额增量</div><div class="v">+¥9,120</div></div>
+        </div>
+
+        <div class="bar" style="margin-bottom:12px">
+          <span style="font-size:12px;color:var(--muted)">筛选变化类型：</span>
+          <span class="pill" style="border-color:var(--ok);color:var(--ok)">☑ 新增</span>
+          <span class="pill">□ 移除</span>
+          <span class="pill">☑ 数量变化</span>
+          <span class="pill">☑ 单价变化</span>
+        </div>
+
+        <div class="sysPanel">
+          <div class="sysHead open"><span class="caret">▶</span><b>视频监控系统</b><span class="cnt">3 处变更</span><span class="money">¥+8,520</span></div>
+          <table>
+            <thead><tr><th>变化</th><th>设备名称</th><th class="num">V2 数量</th><th class="num">V4 数量</th><th class="num">V2 单价</th><th class="num">V4 单价</th><th class="num">金额变动</th></tr></thead>
+            <tbody>
+              <tr><td><span class="badge ok">数量变化</span></td><td>高清枪型摄像机</td><td class="num">480</td><td class="num">486</td><td class="num">¥224.00</td><td class="num">¥224.00</td><td class="num ok">+¥1,344</td></tr>
+              <tr><td><span class="badge ok">单价变化</span></td><td>NVR 存储服务器</td><td class="num">12</td><td class="num">12</td><td class="num">¥6,500.00</td><td class="num">¥6,800.00</td><td class="num ok">+¥3,600</td></tr>
+              <tr><td><span class="badge purple">新增</span></td><td>球型摄像机（新增）</td><td class="num">—</td><td class="num">98</td><td class="num">—</td><td class="num">¥980.00</td><td class="num ok">+¥96,040</td></tr>
+              <tr><td><span class="badge red">移除</span></td><td>模拟视频头（移除）</td><td class="num">40</td><td class="num">—</td><td class="num">¥120.00</td><td class="num">—</td><td class="num danger">-¥4,800</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="note">▲ 同比两版本：变更项按系统分组；点击「点位修订时间线」可查看每次点位增删改的快照对比（原版本模块能力保留）。</div>
+      </section>
+
+      <!-- ================= ⑪ 复盘 ================= -->
+      <section class="mod" id="m10" style="display:none">
+        <h2>⑪ 复盘模块 <span class="tag">模块 10 / 可照搬原方案</span></h2>
+        <div class="desc">可照搬原方案：记录项目收尾总结（做得好的 / 遇到的问题 / 待改进 / 完成度自评），沉淀为 review 文档。</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+          <div class="card">
+            <div class="cHead">✍ 项目复盘 <span class="faint" style="font-weight:400;font-size:11px">沉淀为文档 type=review_record</span></div>
+            <div class="cBody">
+              <div class="field"><label>做得好的</label><textarea rows="2" style="border:1px solid var(--rule);border-radius:7px;padding:8px;font-size:12.5px;font-family:inherit">选型走设备中心档次联动，清单与预算一次对齐。</textarea></div>
+              <div class="field"><label>遇到的问题</label><textarea rows="2" style="border:1px solid var(--rule);border-radius:7px;padding:8px;font-size:12.5px;font-family:inherit">外墙摄像机点位复核遗漏 6 个。</textarea></div>
+              <div class="field"><label>待改进</label><textarea rows="2" style="border:1px solid var(--rule);border-radius:7px;padding:8px;font-size:12.5px;font-family:inherit">导入模板示例行补充单位列。</textarea></div>
+              <div class="bar">
+                <select style="border:1px solid var(--rule);border-radius:7px;padding:5px 9px;font-size:12px"><option>8/10</option></select>
+                <span class="faint" style="font-size:11px">完成任务 21 · 清单 4 版</span>
+                <span style="flex:1"></span>
+                <button class="btn pri" onclick="toast('复盘已保存')">保存复盘</button>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="cHead">历史复盘 <span class="faint mono" style="font-weight:400">2 条</span></div>
+            <div class="cBody" style="font-size:12.5px">
+              <div style="display:flex;gap:8px;border-bottom:1px solid #f0f0f7;padding:8px 0">
+                🏆 复盘 · 2026-08-12 <span class="badge green" style="margin-left:auto">9/10</span>
+              </div>
+              <div style="display:flex;gap:8px;padding:8px 0">
+                🏆 复盘 · 2026-07-20 <span class="badge purple" style="margin-left:auto">7/10</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div style="text-align:center;color:var(--faint);font-size:12px;padding:10px 0 24px">
+        RD Workstation 2.0 · 项目中心 v2 顶层规划可视化方案 · 11 个模块共 11 屏演示 · 确认口径后进入实施
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- ============ 弹窗：项目模版 ============ -->
+<div class="mask" id="dlg-template"><div class="dlg" style="width:680px">
+  <div class="dHead">项目模版（按业态配置与套用） <button onclick="closeDlg('dlg-template')">✕</button></div>
+  <div class="dBd">
+    <!-- 业态切换：模版列表随业态联动 -->
+    <div class="bar" style="margin-bottom:12px">
+      <span style="font-size:12px;color:var(--muted)">业态</span>
+      <div class="seg">
+        <button class="on">酒店</button>
+        <button>政府 · 公共安全</button>
+        <button>办公 · 智能楼宇</button>
+        <button>医疗</button>
+        <button>教育</button>
+        <button>商业综合体</button>
+        <button>文体场馆</button>
+        <button>＋ 自定义</button>
+      </div>
+    </div>
+
+    <!-- 当前业态下的模版列表（每个模版按业态独立配置） -->
+    <div class="card" style="margin-bottom:10px">
+      <div class="cHead">「酒店」业态 · 可用模版（2） <span class="more">
+        <button class="btn sm">＋ 新建模版（存当前业态）</button>
+        <button class="btn sm">↓ 从当前项目生成模版</button>
+      </span></div>
+      <div class="cB" style="display:flex;flex-direction:column;gap:8px">
+        <div style="border:1px solid var(--accent);border-radius:8px;background:#faf8ff;padding:8px 10px;display:flex;align-items:center;gap:8px">
+          <input type="radio" name="tpl" checked style="accent-color:var(--accent)">
+          <div style="flex:1">
+            <b style="font-size:12.5px">酒店标准模版</b>
+            <span class="badge purple">内置</span>
+            <span class="faint" style="font-size:11px;margin-left:6px">酒店 · 标准型 · 12 系统</span>
+            <div class="muted" style="font-size:11.5px;margin-top:2px">公共广播 / 客房智控(BRC) / 信息发布 / 视频监控 / 门禁安保 / 停车场管理 / 无线对讲 / 楼宇自控 BA / 能耗计量 / 客房RCU …</div>
+          </div>
+          <button class="btn sm">套用</button>
+          <button class="btn sm" style="color:var(--danger)">🗑</button>
+        </div>
+        <div style="border:1px solid var(--rule);border-radius:8px;padding:8px 10px;display:flex;align-items:center;gap:8px">
+          <input type="radio" name="tpl" style="accent-color:var(--accent)">
+          <div style="flex:1">
+            <b style="font-size:12.5px">酒店·智慧客房加强版</b>
+            <span class="badge blue">自定义</span>
+            <span class="faint" style="font-size:11px;margin-left:6px">酒店 · 高端型 · 14 系统</span>
+            <div class="muted" style="font-size:11.5px;margin-top:2px">在标准模版基础上增加 房间智能面板 / 能源管理 / 智慧窗帘电机 …</div>
+          </div>
+          <button class="btn sm">套用</button>
+          <button class="btn sm" style="color:var(--danger)">🗑</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="priceBd" style="margin-bottom:10px"><b>不同业态切换后模版随之联动：</b>政府 · 公共安全 → 视频监控 / 门禁 / 报警 / 电子巡更 / 对讲 / UPS …；医疗 → 医用呼叫 / 门禁 / 视频 / 病房内网 …；可对任意业态自定义新建模版（含系统集 + 默认设计参数 + 默认档次）。</div>
+
+    <div class="note">套用当前业态模版 → 新建项目自动带该业态并生成对应系统集与默认设计参数；「从当前项目生成模版」将本项目（含业态、系统集、设计参数、档次）存为该业态的新模版，供后续同业态项目复用。</div>
+  </div>
+  <div class="dFt"><button class="btn" onclick="closeDlg('dlg-template')">取消</button><button class="btn pri" onclick="closeDlg('dlg-template');toast('已套用「酒店标准模版」→ 新建项目（业态：酒店 + 自动生成 12 系统）')">套用模版新建项目</button></div>
+</div></div>
+
+<!-- ============ 弹窗：新建项目 ============ -->
+<div class="mask" id="dlg-newproj"><div class="dlg" style="width:520px">
+  <div class="dHead">新建项目 <button onclick="closeDlg('dlg-newproj')">✕</button></div>
+  <div class="dBd">
+    <div class="frow">
+      <div class="field"><label>项目名称 *</label><input placeholder="如：苏州XX酒店项目"></div>
+      <div class="field"><label>项目编号</label><input placeholder="留空自动生成"></div>
+      <div class="field"><label>业态（原"类型"）</label>
+        <select><option>政府 · 公共安全</option><option>办公 · 智能楼宇</option><option>医疗</option><option>教育</option><option selected>酒店</option><option>商业综合体</option><option>文体场馆</option><option value="__custom__">＋ 自定义新业态…</option></select>
+      </div>
+      <div class="field"><label>业主</label><input placeholder="业主名称"></div>
+      <div class="field"><label>建筑面积 (㎡)</label><input type="number" placeholder="0"></div>
+      <div class="field"><label>层数</label><input type="number" placeholder="0"></div>
+      <div class="field"><label>设计阶段</label><select><option>方案</option><option>初设</option><option>施工图</option></select></div>
+      <div class="field"><label>默认档次</label><select><option>经济型</option><option selected>标准型</option><option>高端型</option></select></div>
+    </div>
+    <div class="bar"><button class="btn sm" onclick="openDlg('dlg-format')">＋ 自定义业态（业态会越来越多，随时新增）</button></div>
+  </div>
+  <div class="dFt"><button class="btn" onclick="closeDlg('dlg-newproj')">取消</button><button class="btn pri" onclick="closeDlg('dlg-newproj');toast('项目已创建')">创建项目</button></div>
+</div></div>
+
+<!-- ============ 弹窗：自定义业态 ============ -->
+<div class="mask" id="dlg-format"><div class="dlg" style="width:520px">
+  <div class="dHead">业态管理（自定义） <button onclick="closeDlg('dlg-format')">✕</button></div>
+  <div class="dBd">
+    <p style="font-size:12.5px;color:var(--muted);margin-bottom:10px">项目「类型」列为<b>业态</b>；业态随社会发展持续增加，支持随时自定义新增 / 停用。</p>
+    <div class="card" style="margin-bottom:12px">
+      <div class="cHead">当前业态 <span class="more"><span class="faint mono" style="font-weight:400">7 个</span></span></div>
+      <div class="cBody" style="display:flex;flex-wrap:wrap;gap:6px">
+        <span class="pill" style="border-color:var(--accent);color:var(--accent)">政府 · 公共安全</span>
+        <span class="pill">办公 · 智能楼宇</span>
+        <span class="pill">医疗</span>
+        <span class="pill">教育</span>
+        <span class="pill">酒店</span>
+        <span class="pill">商业综合体</span>
+        <span class="pill">文体场馆</span>
+      </div>
+    </div>
+    <div class="bar">
+      <input placeholder="新增业态，如：数据中心 / 产业园…" style="flex:1;border:1px solid var(--rule);border-radius:7px;padding:6px 10px;font-size:12.5px">
+      <button class="btn pri" onclick="toast('已新增业态（写入字典，全局生效）')">＋ 添加业态</button>
+    </div>
+    <div class="note">数据落地：dictionaries 表 group_code=project_type 开环字典；新建项目 / 编辑项目的「业态」下拉即时读取，可自由输入新增。项目模版按业态配置与套用（业态切换 → 模版集联动）。</div>
+  </div>
+  <div class="dFt"><button class="btn" onclick="closeDlg('dlg-format')">关闭</button></div>
+</div></div>
+
+<!-- ============ 弹窗：设备中心富文本（通用参数 / 详细参数） ============ -->
+<div class="mask" id="dlg-spec"><div class="dlg" style="width:520px">
+  <div class="dHead">🔗 设备中心 · 通用参数（富文本） <button onclick="closeDlg('dlg-spec')">✕</button></div>
+  <div class="dBd">
+    <div class="card">
+      <div class="cHead">高清枪型摄像机 <span class="badge purple">VSS-QD-001</span> <span class="more"><button class="btn sm">在设备中心打开 ↗</button></span></div>
+      <div class="cBody">
+        <p class="groupRow" style="display:block;background:var(--surface-subtle);padding:6px 10px">◆ 通用参数（Product.specification · 富文本）</p>
+        <div class="rich">
+          <p style="font-size:13px;padding:4px 0"><b>成像器件：</b>1/2.8" 逐行扫描 CMOS，200 万像素</p>
+          <p style="font-size:13px;padding:4px 0"><b>编码：</b>H.265+ / H.265 / H.264，主码流 4Mbps</p>
+          <p style="font-size:13px;padding:4px 0"><b>接口：</b>1×RJ45 10M/100M，PoE 供电 12V DC</p>
+          <p style="font-size:13px;padding:4px 0"><b>防护：</b>IP67，-30℃~60℃ 宽温</p>
+        </div>
+      </div>
+    </div>
+    <div class="note">材料表 / 预算清单 / 概算清单的「通用参数」列 = 设备名称 → 本弹窗内容（表格内以摘要展示，点击/悬停展开富文本）；数据同源，设备中心改参数即联动。</div>
+  </div>
+  <div class="dFt"><button class="btn" onclick="closeDlg('dlg-spec')">关闭</button></div>
+</div></div>
+<div class="mask" id="dlg-detail"><div class="dlg" style="width:520px">
+  <div class="dHead">🔗 设备中心 · 详细参数（所选档次品牌型号） <button onclick="closeDlg('dlg-detail')">✕</button></div>
+  <div class="dBd">
+    <div class="bar" style="margin-bottom:8px">
+      <span class="badge purple">标准档</span><span>海康威视 · DS-2CD2T4XYZ</span>
+    </div>
+    <div class="card">
+      <div class="cHead">详细参数（ProductModel.detail_html · 富文本）</div>
+      <div class="cBody">
+        <p style="font-size:13px;padding:4px 0"><b>分辨率：</b>2560×1440@25fps（4MP）</p>
+        <p style="font-size:13px;padding:4px 0"><b>补光：</b>红外 50m，Smart IR 防过曝</p>
+        <p style="font-size:13px;padding:4px 0"><b>镜头：</b>4mm 定焦，F1.6</p>
+        <p style="font-size:13px;padding:4px 0"><b>智能：</b>越界侦测 / 区域入侵 / 人脸抓拍</p>
+      </div>
+    </div>
+    <div class="note">「详细参数」列 = 该行选型 <b>档次 → 品牌 + 型号</b> → ProductModel.detail_html 富文本；换档即改选品牌型号并刷新本列。</div>
+  </div>
+  <div class="dFt"><button class="btn" onclick="closeDlg('dlg-detail')">关闭</button></div>
+</div></div>
+
+<!-- ============ 弹窗：备份 ============ -->
+<div class="mask" id="dlg-backup"><div class="dlg" style="width:440px">
+  <div class="dHead">导入 / 导出备份 <button onclick="closeDlg('dlg-backup')">✕</button></div>
+  <div class="dBd">
+    <div class="bar" style="margin-bottom:10px"><button class="btn pri">⬇ 导出 .rdw.json</button><span class="faint" style="font-size:11.5px">包含本项目全部业务表</span></div>
+    <div class="field"><label>导入备份文件</label><input type="file" disabled style="opacity:.6"></div>
+    <div class="note">导入按 id 合并项目表数据：已存在覆盖，新记录插入。</div>
+  </div>
+  <div class="dFt"><button class="btn" onclick="closeDlg('dlg-backup')">关闭</button></div>
+</div></div>
+
+<!-- ============ 弹窗：点位批量导入 ============ -->
+<div class="mask" id="dlg-point-import"><div class="dlg">
+  <div class="dHead">批量导入点位 <button onclick="closeDlg('dlg-point-import')">✕</button></div>
+  <div class="dBd">
+    <div class="sch">⬇ <b style="color:#5b39e8">download 导入模板（CSV）</b>　·　支持表头：系统* / 设备名称* / 建筑 / 弱电间 / 数量</div>
+    <table>
+      <thead><tr><th>系统</th><th>设备名称</th><th>建筑</th><th>弱电间</th><th class="num">数量</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">视频监控</td><td>高清枪型摄像机</td><td>A栋</td><td>1F-IDF</td><td class="num">12</td></tr>
+        <tr><td class="mono">门禁管理</td><td>门禁读卡器</td><td>A栋</td><td>1F-IDF</td><td class="num">4</td></tr>
+      </tbody>
+    </table>
+    <div class="note">未填系统默认落到当前选中系统；设备名称需在设备中心存在（自动匹配），缺失的建筑/弱电间自动建档；解析出错的行走红色跳过列表。</div>
+    <div class="bar" style="margin-top:10px"><span class="faint" style="font-size:11.5px">解析结果：2 行将通过 / 0 行跳过</span></div>
+  </div>
+  <div class="dFt"><button class="btn" onclick="closeDlg('dlg-point-import')">取消</button><button class="btn pri" onclick="closeDlg('dlg-point-import');toast('已导入 2 个点位')">确认导入</button></div>
+</div></div>
+
+<!-- ============ 弹窗：批量新增点位 ============ -->
+<div class="mask" id="dlg-point-batch"><div class="dlg">
+  <div class="dHead">批量新增点位 <button onclick="closeDlg('dlg-point-batch')">✕</button></div>
+  <div class="dBd">
+    <div class="bar" style="margin-bottom:10px">
+      <span style="font-size:12px;color:var(--muted)">所属系统</span>
+      <select style="border:1px solid var(--rule);border-radius:6px;padding:4px 8px;font-size:12px"><option>视频监控系统</option><option>门禁管理系统</option></select>
+      <button class="btn sm" style="margin-left:auto" onclick="toastBug()">＋ 追加一行</button>
+    </div>
+    <table>
+      <thead><tr><th>设备名称</th><th>建筑</th><th>弱电间</th><th class="num">数量</th><th></th></tr></thead>
+      <tbody>
+        <tr>
+          <td><select style="border:1px solid var(--rule);border-radius:6px;padding:4px 8px;font-size:12px;width:180px"><option>高清枪型摄像机</option><option>红外半球摄像机</option></select></td>
+          <td><input placeholder="A栋" style="border:1px solid var(--rule);border-radius:6px;padding:4px 8px;font-size:12px;width:80px"></td>
+          <td><input placeholder="1F-IDF" style="border:1px solid var(--rule);border-radius:6px;padding:4px 8px;font-size:12px;width:90px"></td>
+          <td><input type="number" value="12" style="border:1px solid var(--rule);border-radius:6px;padding:4px 8px;font-size:12px;width:60px"></td>
+          <td><button class="btn sm" style="color:var(--danger)">🗑</button></td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="note">批量新增与单个新增共用一张表：单个新增即单行模式。建筑/弱电间缺失时自动建档。</div>
+  </div>
+  <div class="dFt"><button class="btn" onclick="closeDlg('dlg-point-batch')">取消</button><button class="btn pri" onclick="closeDlg('dlg-point-batch');toast('已批量新增 1 个点位')">确认新增</button></div>
+</div></div>
+
+<!-- ============ 弹窗：单个新增点位 ============ -->
+<div class="mask" id="dlg-point-add"><div class="dlg" style="width:480px">
+  <div class="dHead">单个新增点位 <button onclick="closeDlg('dlg-point-add')">✕</button></div>
+  <div class="dBd">
+    <div class="field"><label>所属系统 *</label><select><option>视频监控系统</option><option>门禁管理系统</option></select></div>
+    <div class="field"><label>设备名称 *</label><select><option>高清枪型摄像机</option><option>红外半球摄像机</option><option>球型摄像机</option></select></div>
+    <div class="frow">
+      <div class="field"><label>建筑</label><select><option>A栋</option><option>B栋</option></select></div>
+      <div class="field"><label>弱电间</label><select><option>1F-IDF</option><option>2F-IDF</option></select></div>
+      <div class="field"><label>数量</label><input type="number" value="1"></div>
+    </div>
+  </div>
+  <div class="dFt"><button class="btn" onclick="closeDlg('dlg-point-add')">取消</button><button class="btn pri" onclick="closeDlg('dlg-point-add');toast('已新增点位 VSS-013')">保存点位</button></div>
+</div></div>
+
+<!-- ============ 弹窗：导出点位 Excel ============ -->
+<div class="mask" id="dlg-point-export"><div class="dlg" style="width:440px">
+  <div class="dHead">导出点位 Excel <button onclick="closeDlg('dlg-point-export')">✕</button></div>
+  <div class="dBd">
+    <p style="font-size:12.5px;color:var(--muted);margin-bottom:10px">导出范围：<b>全部系统（3 个）</b> / 仅选中系统</p>
+    <div class="bar"><button class="btn pri" onclick="closeDlg('dlg-point-export');toast('已导出 点位清单.xlsx（3 个 Sheet）')">⇩ 导出 .xlsx</button></div>
+    <div class="note">Sheet 结构：每系统 1 个 Sheet（列：建筑 / 弱电间 / 设备名称 / 数量）+ 全量汇总 Sheet。</div>
+  </div>
+  <div class="dFt"><button class="btn" onclick="closeDlg('dlg-point-export')">关闭</button></div>
+</div></div>
+
+<!-- ============ 弹窗：设计说明导出 ============ -->
+<div class="mask" id="dlg-doc"><div class="dlg" style="width:440px">
+  <div class="dHead">导出设计说明 Word <button onclick="closeDlg('dlg-doc')">✕</button></div>
+  <div class="dBd">
+    <div class="bar"><button class="btn pri" onclick="closeDlg('dlg-doc');toast('已导出 苏州某公安项目-设计说明.doc（分级标题）')">⇩ 导出 .doc</button></div>
+    <div class="note">Word 分级标题：H1 项目名 → H2 系统 → H3 章节 → H4 表格；WPS/Word 打开自动可建目录。未填写的系统（如 NET）会标注「未填写」并跳过正文。</div>
+  </div>
+  <div class="dFt"><button class="btn" onclick="closeDlg('dlg-doc')">关闭</button></div>
+</div></div>
+
+<!-- ============ 弹窗：导出 Excel（材料/预算/概算 三表共用） ============ -->
+<div class="mask" id="dlg-export"><div class="dlg" style="width:460px">
+  <div class="dHead">导出 Excel（材料表 / 预算清单 / 概算清单 均有） <button onclick="closeDlg('dlg-export')">✕</button></div>
+  <div class="dBd">
+    <div class="bar" style="flex-direction:column;align-items:stretch;gap:8px">
+      <button class="btn" onclick="closeDlg('dlg-export');toast('已导出整表分组 Excel（1 主 Sheet + 汇总 Sheet）')">⇩ 整表分组（全部系统 1 个 Sheet + 汇总 Sheet）</button>
+      <button class="btn" onclick="closeDlg('dlg-export');toast('已导出分系统 Excel（每系统 1 个 Sheet + 汇总 Sheet）')">⇩ 分系统（每系统 1 个 Sheet + 汇总 Sheet）</button>
+    </div>
+  </div>
+  <div class="dFt"><button class="btn" onclick="closeDlg('dlg-export')">关闭</button></div>
+</div></div>
+
+<!-- ============ 弹窗：版本 ============ -->
+<div class="mask" id="dlg-versions"><div class="dlg" style="width:440px">
+  <div class="dHead">确认生成清单版本 <button onclick="closeDlg('dlg-versions')">✕</button></div>
+  <div class="dBd">
+    <div class="card" style="margin-bottom:10px">
+      <div class="cHead">版本 V4（草稿） <span class="more"><span class="badge gray">未确认</span></span></div>
+      <div class="cBody" style="font-size:12.5px;color:var(--muted)">
+        将当前选型（标准型）固化为清单 V4，并同步生成预算明细。<br>
+        <span class="faint">重新生成会保留手工调整行（manually_tuned）。</span>
+      </div>
+    </div>
+    <button class="btn pri" onclick="closeDlg('dlg-versions');toast('已生成清单 V4（草稿）并生成预算')">⚡ 确认生成</button>
+  </div>
+  <div class="dFt"><button class="btn" onclick="closeDlg('dlg-versions')">取消</button></div>
+</div></div>
+
+<!-- ============ 弹窗：新增文档 ============ -->
+<div class="mask" id="dlg-newdoc"><div class="dlg" style="width:480px">
+  <div class="dHead">新增文档 <button onclick="closeDlg('dlg-newdoc')">✕</button></div>
+  <div class="dBd">
+    <div class="frow">
+      <div class="field" style="grid-column:1/3"><label>标题</label><input placeholder="文档标题"></div>
+      <div class="field"><label>类型</label><select><option>设计说明</option><option>设备表</option><option>会议纪要</option><option>普通笔记</option></select></div>
+      <div class="field"><label>状态</label><select><option>草稿</option><option>定稿</option></select></div>
+      <div class="field" style="grid-column:1/3"><label>内容</label><textarea rows="4" style="border:1px solid var(--rule);border-radius:7px;padding:8px;font-size:12.5px;font-family:inherit"></textarea></div>
+    </div>
+  </div>
+  <div class="dFt"><button class="btn" onclick="closeDlg('dlg-newdoc')">取消</button><button class="btn pri" onclick="closeDlg('dlg-newdoc');toast('文档已创建')">保存</button></div>
+</div></div>
+
+<div id="toast" style="position:fixed;left:50%;bottom:32px;transform:translateX(-50%);background:#1a1a2e;color:#fff;font-size:12.5px;padding:8px 16px;border-radius:8px;display:none;z-index:200;box-shadow:0 8px 30px rgba(0,0,0,.25)"></div>
+
+<script>
+  var T = document.getElementById('tabs')
+  var S = document.getElementById('side')
+  var mods = [0,1,2,3,4,5,6,7,8,9,10]
+  function show(m){
+    mods.forEach(function(i){
+      var s = document.getElementById('m'+i); if(s) s.style.display = (i===m)?'block':'none'
+    })
+    Array.prototype.forEach.call(T.querySelectorAll('button'),function(b){ b.className = (+b.getAttribute('data-m')===m)?'on':'' })
+    Array.prototype.forEach.call(S.querySelectorAll('a'),function(a){ a.className = (+a.getAttribute('data-m')===m)?'on':'' })
+    window.scrollTo({top:0})
+  }
+  T.addEventListener('click',function(e){
+    var b = e.target.closest('button[data-m]'); if(b) show(+b.getAttribute('data-m'))
+  })
+  S.addEventListener('click',function(e){
+    var a = e.target.closest('a[data-m]'); if(a) show(+a.getAttribute('data-m'))
+  })
+  // 系统面板折叠展开
+  document.addEventListener('click',function(e){
+    var h = e.target.closest('.sysHead')
+    if(h && !e.target.closest('button')){
+      h.classList.toggle('open')
+      var body = h.parentNode.querySelectorAll('table')
+      body.forEach(function(t){ t.style.display = h.classList.contains('open')?'':'none' })
+    }
+  })
+  // 弹窗
+  function openDlg(id){ document.getElementById(id).classList.add('show') }
+  function closeDlg(id){ document.getElementById(id).classList.remove('show') }
+  window.openDlg = openDlg; window.closeDlg = closeDlg
+  document.addEventListener('click',function(e){
+    if(e.target.classList.contains('mask')) e.target.classList.remove('show')
+  })
+  // toast
+  var toastBox = document.getElementById('toast'), tTimer
+  function toast(msg){
+    toastBox.textContent = msg; toastBox.style.display = 'block'
+    clearTimeout(tTimer); tTimer = setTimeout(function(){ toastBox.style.display='none' }, 2200)
+  }
+  window.toast = toast
+  window.toastBug = function(){ toast('（演示）点击「＋ 追加一行」即动态新增录入行') }
+</script>
+</body>
+</html>

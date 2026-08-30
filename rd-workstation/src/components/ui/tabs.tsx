@@ -1,5 +1,4 @@
 import * as React from 'react'
-import { Check, type LucideIcon } from 'lucide-react'
 import { cn } from '../../lib/utils'
 
 /** 顶部 Tab 栏 */
@@ -38,52 +37,5 @@ export function TabBar<T extends string>({
         </button>
       ))}
     </div>
-  )
-}
-
-/** 左侧步骤流程栏（系统设计工作区） */
-export function StepRail({
-  steps,
-  current,
-  onSelect,
-  className,
-}: {
-  steps: { key: string; label: string; icon?: LucideIcon; done?: boolean }[]
-  current: string
-  onSelect: (key: string) => void
-  className?: string
-}) {
-  return (
-    <nav className={cn('flex flex-col gap-0.5', className)} aria-label="设计步骤">
-      {steps.map((s, i) => {
-        const active = s.key === current
-        const done = s.done
-        return (
-          <button
-            key={s.key}
-            type="button"
-            onClick={() => onSelect(s.key)}
-            className={cn(
-              'group flex items-center gap-2 rounded-[6px] px-2.5 py-1.5 text-left text-[12.5px] transition-colors',
-              active ? 'bg-accent-soft font-semibold text-accent' : done ? 'text-ink hover:bg-hover' : 'text-faint hover:bg-hover hover:text-muted',
-            )}
-          >
-            <span
-              className={cn(
-                'flex size-5 shrink-0 items-center justify-center rounded-[5px] font-mono text-[10.5px]',
-                active
-                  ? 'bg-accent text-white'
-                  : done
-                    ? 'bg-ok-soft text-ok'
-                    : 'bg-surface-subtle text-faint',
-              )}
-            >
-              {done ? <Check className="size-3" /> : i + 1}
-            </span>
-            <span className="truncate">{s.label}</span>
-          </button>
-        )
-      })}
-    </nav>
   )
 }

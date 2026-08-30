@@ -1,11 +1,10 @@
 import { useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
-import { DeviceService, DEVICE_SYSTEMS, DEVICE_CATEGORIES } from '../../../services'
+import { DeviceService, DEVICE_CATEGORIES } from '../../../services'
 import { Button } from '../../../components/ui/button'
-import { Input, Select, Field } from '../../../components/ui/field'
+import { Input, Select, Field, Textarea } from '../../../components/ui/field'
 import { Modal } from '../../../components/ui/dialog'
 import { toast } from '../../../components/ui/toast'
-import { RichTextEditor } from '../../../components/ui/rich-text'
 import { GRADE_LABEL } from '../device-center.types'
 
 interface RowForm {
@@ -18,8 +17,9 @@ interface RowForm {
 
 /* ---------- 新增设备：设备（名称/通用参数/单位）+ 品牌型号配置行（品牌/型号/详细参数/档次/参考价）一次添加 ---------- */
 function DeviceFormModal({ open, onClose, defaultSystemId, onDone }: { open: boolean; onClose: () => void; defaultSystemId?: string; onDone?: (productId: string) => void }) {
+  const systems = DeviceService.deviceSystems()
   const [form, setForm] = useState(() => ({
-    system_id: defaultSystemId ?? 'sys_vss',
+    system_id: defaultSystemId ?? systems[0]?.id ?? 'sys_vss',
     category: 'front',
     name: '',
     generic: '',
@@ -60,7 +60,7 @@ function DeviceFormModal({ open, onClose, defaultSystemId, onDone }: { open: boo
           <div className="grid grid-cols-2 gap-3">
             <Field label="子系统" required>
               <Select value={form.system_id} onChange={(e) => setForm({ ...form, system_id: e.target.value })} className="h-7 text-[12px]">
-                {DEVICE_SYSTEMS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+                {systems.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
               </Select>
             </Field>
             <Field label="类别" required>
@@ -80,8 +80,8 @@ function DeviceFormModal({ open, onClose, defaultSystemId, onDone }: { open: boo
             </Field>
           </div>
           <div className="mt-3">
-            <Field label="通用参数（富文本）">
-              <RichTextEditor value={form.generic} onChange={(html) => setForm({ ...form, generic: html })} height={120} placeholder="输入设备的通用参数，如图像/夜视/防护能力等…" />
+            <Field label="通用参数">
+              <Textarea value={form.generic} onChange={(e) => setForm({ ...form, generic: e.target.value })} rows={4} placeholder="输入设备的通用参数，一行一条，如图像/夜视/防护能力等…" />
             </Field>
           </div>
         </div>
@@ -108,7 +108,7 @@ function DeviceFormModal({ open, onClose, defaultSystemId, onDone }: { open: boo
                   <Input type="number" min={0} value={r.refPrice} onChange={(e) => setRow(i, { refPrice: e.target.value })} placeholder="参考价" className="h-7 text-[12px]" />
                   <button type="button" className="flex items-center justify-center rounded text-faint hover:bg-hover hover:text-danger" disabled={rows.length === 1} onClick={() => setRows(rows.filter((_, j) => j !== i))} title="删除配置行"><Trash2 className="size-3.5" /></button>
                 </div>
-                <RichTextEditor value={r.detailHtml ?? ''} onChange={(html) => setRow(i, { detailHtml: html })} height={90} placeholder={`${r.model || '该型号'}的详细参数（供应商实际参数）…`} />
+                <Textarea value={r.detailHtml ?? ''} onChange={(e) => setRow(i, { detailHtml: e.target.value })} rows={3} placeholder={`${r.model || '该型号'}的详细参数（供应商实际参数），一行一条…`} />
               </div>
             ))}
           </div>

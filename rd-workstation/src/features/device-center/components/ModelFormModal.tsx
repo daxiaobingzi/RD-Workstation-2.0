@@ -2,10 +2,10 @@ import { useState } from 'react'
 import { DeviceService } from '../../../services'
 import type { ProductModel } from '../../../types/domain'
 import { Button } from '../../../components/ui/button'
-import { Input, Select, Field } from '../../../components/ui/field'
+import { Input, Select, Field, Textarea } from '../../../components/ui/field'
 import { Modal } from '../../../components/ui/dialog'
 import { toast } from '../../../components/ui/toast'
-import { RichTextEditor } from '../../../components/ui/rich-text'
+import { htmlToPlainText } from '../../../components/ui/rich-text'
 import { GRADE_LABEL } from '../device-center.types'
 
 /* ---------- 品牌型号配置行：编辑/新增（设备类型下） ---------- */
@@ -13,7 +13,7 @@ function ModelFormModal({
   open, onClose, model, defaultProductId, defaultSystemId,
 }: { open: boolean; onClose: () => void; model?: ProductModel; defaultProductId?: string; defaultSystemId?: string }) {
   const [form, setForm] = useState<ModelFormState>(() => seedModelForm(model, defaultProductId))
-  const [detail, setDetail] = useState<string>(model?.detail_html ?? '')
+  const [detail, setDetail] = useState<string>(htmlToPlainText(model?.detail_html ?? ''))
 
   if (!open) return null
   const editing = !!model
@@ -76,8 +76,8 @@ function ModelFormModal({
             </Select>
           </Field>
         </div>
-        <Field label="详细参数（富文本：供应商该型号实际参数）">
-          <RichTextEditor value={detail} onChange={setDetail} height={150} placeholder="输入该型号的详细参数：传感器/镜头/夜视/供电/接口等…" />
+        <Field label="详细参数（供应商该型号实际参数）">
+          <Textarea value={detail} onChange={(e) => setDetail(e.target.value)} rows={6} placeholder="输入该型号的详细参数，一行一条：传感器/镜头/夜视/供电/接口等…" />
         </Field>
       </div>
       <div className="mt-4 flex justify-end gap-2">

@@ -1,6 +1,6 @@
-import { NavLink, useLocation, useParams } from 'react-router-dom'
+import { NavLink, useParams } from 'react-router-dom'
 import {
-  Sun, FolderKanban, PenTool, Boxes, Receipt, Calculator, BookOpen,
+  Sun, FolderKanban, Boxes, Receipt, Calculator, BookOpen,
   Target, Repeat, Sparkles, Search, Settings, Command, ChevronRight,
 } from 'lucide-react'
 import { cn } from '../lib/utils'
@@ -8,8 +8,7 @@ import { ProjectService } from '../services'
 
 const NAV = [
   { to: '/today', label: '今日', icon: Sun },
-  { to: '/projects', label: '项目', icon: FolderKanban },
-  { to: '/design', label: '设计', icon: PenTool },
+  { to: '/projects-v2', label: '项目', icon: FolderKanban },
   { to: '/devices', label: '设备', icon: Boxes },
   { to: '/bills', label: '清单', icon: Receipt },
   { to: '/tools', label: '工具', icon: Calculator },
@@ -17,20 +16,6 @@ const NAV = [
   { to: '/goals', label: '目标', icon: Target },
   { to: '/habits', label: '习惯', icon: Repeat },
   { to: '/ai', label: 'AI', icon: Sparkles },
-]
-
-const PROJECT_TABS = [
-  { key: 'overview', label: '概览', path: '' },
-  { key: 'systems', label: '系统', path: '/systems' },
-  { key: 'tasks', label: '任务', path: '/tasks' },
-  { key: 'schedules', label: '日程', path: '/schedules' },
-  { key: 'points', label: '点位', path: '/points' },
-  { key: 'devices', label: '设备', path: '/devices' },
-  { key: 'bills', label: '清单', path: '/bills' },
-  { key: 'budget', label: '预算', path: '/budget' },
-  { key: 'documents', label: '文档', path: '/documents' },
-  { key: 'revisions', label: '版本', path: '/revisions' },
-  { key: 'review', label: '复盘', path: '/review' },
 ]
 
 function Sidebar() {
@@ -102,42 +87,12 @@ function Topbar() {
   )
 }
 
-function ProjectNav() {
-  const { projectId } = useParams()
-  const location = useLocation()
-  if (!projectId) return null
-  const active = PROJECT_TABS.reduce((acc, t) => (location.pathname.endsWith(t.path) || (t.path === '' && !location.pathname.match(/\/[a-z]+$/i)) ? t.key : acc), 'overview')
-  void active
-  return (
-    <div className="flex h-9 shrink-0 items-center gap-0.5 overflow-x-auto border-b border-rule bg-surface px-2 scrollbar-none">
-      {PROJECT_TABS.map((t) => {
-        const target = `/projects/${projectId}${t.path}`
-        const isActive = t.path === '' ? location.pathname === target : location.pathname.startsWith(target) && !location.pathname.includes('/systems/')
-        return (
-          <NavLink
-            key={t.key}
-            to={target}
-            className={cn(
-              'relative shrink-0 px-3 py-2 text-[12.5px] font-medium whitespace-nowrap',
-              isActive ? 'text-accent' : 'text-muted hover:text-ink',
-            )}
-          >
-            {t.label}
-            {isActive && <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-accent" />}
-          </NavLink>
-        )
-      })}
-    </div>
-  )
-}
-
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-full overflow-hidden bg-bg">
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar />
-        <ProjectNav />
         <main className="min-h-0 flex-1 overflow-y-auto">{children}</main>
       </div>
     </div>

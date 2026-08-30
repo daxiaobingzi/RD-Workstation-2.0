@@ -135,6 +135,24 @@ export const PointService = {
       .sort((a, b) => (a.sort_order ?? 9999) - (b.sort_order ?? 9999) || (a.point_code ?? '').localeCompare(b.point_code ?? ''))
   },
 
+  /** 项目级点位（v2 点表）：本项目全部子系统的点位，附 系统名/系统编码 与 设备/建筑/弱电间名 */
+  allByProject(projectId: string): (AttachedPoint & { systemName: string; systemCode: string })[] {
+    const pss = repository
+      .getTable<ProjectSystem>(T.project_systems)
+      .filter((s) => s.project_id === projectId)
+      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+    const sysMap = new Map(repository.getTable<StandardSystem>(T.systems).map((s) => [s.id, s]))
+    const out: (AttachedPoint & { systemName: string; systemCode: string })[] = []
+    for (const ps of pss) {
+      const sys = sysMap.get(ps.system_id)
+      for (const p of PointService.attach(PointService.list(ps.id))) {
+        out.push({ ...p, systemName: sys?.name ?? '未知系统', systemCode: sys?.code ?? '' })
+      }
+    }
+    // 同系统内保持点位编号稳定，跨系统按系统序
+    return out
+  },
+
   /** 汇总点位所在的项目 id（用于结构解析 / 最近使用） */
   projectIdOf(psId: string): string {
     return repository.getById<ProjectSystem>(T.project_systems, psId)?.project_id ?? ''

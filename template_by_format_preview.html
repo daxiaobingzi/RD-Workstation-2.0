@@ -1,0 +1,70 @@
+<style>
+  :root, [data-widget-theme="light"]{
+    --accent:#7c5cff; --accent2:#4aa8ff; --ink:#1a1a2e; --muted:#6b6b80; --faint:#9a9aad;
+    --text-body:14px; --text-caption:12px; --surface:#ffffff; --surface-subtle:#f5f5fa; --rule:#e4e4ee;
+  }
+  :root[data-widget-theme="dark"]{
+    --accent:#9d85ff; --ink:#eceaf8; --muted:#a3a3b8; --faint:#7d7d92; --surface:#1d1d2e;
+    --surface-subtle:#262639; --rule:#34344a;
+  }
+  .rt{font-family:-apple-system,"PingFang SC","Microsoft YaHei",system-ui,sans-serif; color:var(--ink); font-size:var(--text-body); line-height:1.5; display:flex; flex-direction:column; gap:10px; padding:12px; background:var(--surface); border:1px solid var(--rule); border-radius:12px}
+  .rt .cap{display:flex; align-items:center; gap:7px; font-size:13px; font-weight:700}
+  .rt .seg{display:inline-flex; background:var(--surface-subtle); border:1px solid var(--rule); border-radius:8px; overflow:hidden; flex-wrap:wrap}
+  .rt .seg button{padding:5px 12px; font-size:11.5px; border:none; background:none; color:var(--muted); cursor:pointer}
+  .rt .seg button.on{background:#f0ecff; color:var(--accent); font-weight:700}
+  .rt .card{border:1px solid var(--rule); border-radius:10px; background:var(--surface); overflow:hidden}
+  .rt .cH{display:flex; align-items:center; gap:6px; padding:7px 11px; font-size:12.5px; font-weight:600; border-bottom:1px solid var(--rule); background:var(--surface)}
+  .rt .cB{padding:9px 11px; font-size:12px}
+  .rt .tpl{border:1px solid var(--rule); border-radius:8px; padding:8px 10px; display:flex; align-items:center; gap:8px; margin-bottom:6px}
+  .rt .tpl.sel{border-color:var(--accent); background:#faf8ff}
+  .rt .b2{display:inline-flex; font-size:10px; padding:0 6px; border-radius:99px; font-weight:600}
+  .rt .b2.p{background:#f0ecff; color:var(--accent)} .rt .b2.b{background:#e9f3ff; color:#3b82f6}
+  .rt .btn{background:var(--surface); border:1px solid var(--rule); border-radius:7px; padding:3px 8px; font-size:11px; color:var(--ink); cursor:pointer}
+  .rt .btn.pri{background:var(--accent); border-color:var(--accent); color:#fff}
+  .rt .faint{color:var(--faint)} .rt .muted{color:var(--muted)}
+</style>
+<div class="rt" data-dynamic-ui-widget data-template="template_by_format">
+  <div class="cap">项目模版（按业态配置与套用）—— 业态切换，模版集联动</div>
+  <div class="seg">
+    <button class="on">酒店</button><button>政府 · 公共安全</button><button>办公 · 智能楼宇</button>
+    <button>医疗</button><button>教育</button><button>商业综合体</button><button>文体场馆</button><button>＋ 自定义</button>
+  </div>
+
+  <div class="card">
+    <div class="cH">「酒店」业态 · 可用模版（2） <span style="margin-left:auto"></span><button class="btn">＋ 新建模版（存当前业态）</button><button class="btn">↓ 从当前项目生成模版</button></div>
+    <div class="cB">
+      <div class="tpl sel">
+        <input type="radio" checked style="accent-color:var(--accent)">
+        <div style="flex:1">
+          <b style="font-size:12.5px">酒店标准模版</b> <span class="b2 p">内置</span> <span class="faint" style="font-size:10.5px;margin-left:4px">酒店 · 标准型 · 12 系统</span>
+          <div class="muted" style="font-size:11px;margin-top:1px">公共广播 / 客房智控(BRC) / 信息发布 / 视频监控 / 门禁安保 / 停车场 / 无线对讲 / BA / 能耗计量 / 客房RCU…</div>
+        </div>
+        <button class="btn">套用</button>
+      </div>
+      <div class="tpl">
+        <input type="radio" style="accent-color:var(--accent)">
+        <div style="flex:1">
+          <b style="font-size:12.5px">酒店·智慧客房加强版</b> <span class="b2 b">自定义</span> <span class="faint" style="font-size:10.5px;margin-left:4px">酒店 · 高端型 · 14 系统</span>
+          <div class="muted" style="font-size:11px;margin-top:1px">标准模版 + 房间智能面板 / 能源管理 / 智慧窗帘电机…</div>
+        </div>
+        <button class="btn">套用</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="cH">如切换业态 → 模版集随之联动（示意）</div>
+    <div class="cB">
+      <div class="muted" style="font-size:11.5px;line-height:1.8">
+        <b>政府 · 公共安全</b>：视频监控 / 门禁 / 报警 / 电子巡更 / 无线对讲 / UPS …<br>
+        <b>医疗</b>：医用呼叫 / 门禁 / 视频监控 / 病房内网 / 手术室示教 …<br>
+        <b>商业综合体</b>：客流统计 / 停车场 / 信息发布 / 消防联动 …<br>
+        <b>文体场馆</b>：票务闸机 / 扩声 / 灯光控制 / 大屏显示 …
+      </div>
+    </div>
+  </div>
+
+  <div style="font-size:11px;color:var(--muted);background:var(--surface-subtle);border-radius:7px;padding:6px 10px">
+    套用模版 → 新建项目自动带该业态并生成对应系统集与默认设计参数；「从当前项目生成模版」连同业态、系统集、设计参数、档次一起存档，供后续同业态项目复用。
+  </div>
+</div>

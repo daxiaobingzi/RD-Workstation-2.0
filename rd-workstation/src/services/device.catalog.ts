@@ -6,6 +6,7 @@ import type {
 } from '../types/domain'
 import { uid } from '../lib/utils'
 import { DeviceGrade } from './device.grade'
+import { DeviceCode } from './device.code'
 
 function nowIso() {
   return new Date().toISOString()
@@ -22,28 +23,6 @@ export interface DeviceTypeView {
   priceMax: number | null
   disabledCount: number
 }
-
-/** 子系统顶层元数据（设备中心页签数据源；与 device-center.types.SYSTEM_GROUPS 同步维护） */
-export const DEVICE_SYSTEMS: { id: string; label: string }[] = [
-  { id: 'sys_vss', label: '安防 · 视频监控' },
-  { id: 'sys_acs', label: '安防 · 门禁管理' },
-  { id: 'sys_ias', label: '安防 · 入侵报警' },
-  { id: 'sys_pat', label: '安防 · 电子巡更' },
-  { id: 'sys_fen', label: '安防 · 电子围栏' },
-  { id: 'sys_ics', label: '安防 · 可视对讲' },
-  { id: 'sys_lan', label: '信息网络 · 信息网络' },
-  { id: 'sys_cab', label: '信息网络 · 综合布线' },
-  { id: 'sys_gpn', label: '信息网络 · 全光网络' },
-  { id: 'sys_wls', label: '信息网络 · 无线对讲' },
-  { id: 'sys_cee', label: '机房 · 机房工程' },
-  { id: 'sys_pipe', label: '机房 · 综合管路' },
-  { id: 'sys_cps', label: '公共设施 · 停车管理' },
-  { id: 'sys_pas', label: '公共设施 · 公共广播' },
-  { id: 'sys_info', label: '公共设施 · 信息发布' },
-  { id: 'sys_led', label: '公共设施 · LED大屏' },
-  { id: 'sys_bms', label: '楼宇控制 · 楼宇自控' },
-  { id: '__other', label: '通用设备' },
-]
 
 /** 类别标签元数据（设备类型属性字段的取值与展示；对齐 Vue：前端/后端/管材线缆/辅材） */
 export const DEVICE_CATEGORIES: { code: string; label: string }[] = [
@@ -116,15 +95,18 @@ export const DeviceCatalog = {
       system_id: data.system_id, category: data.category,
     } as Product
     repository.insert(T.products, p)
+    // 自动分配设备编码（{系统简写}-{分类拼音首字母}-{序号}）
+    DeviceCode.assignCode(p)
     return p
   },
   /** 创建设备类型（不含型号） */
   addDeviceType(data: { product_family_id?: string; name: string; manufacturer?: string; specification?: string; unit?: string; system_id?: string; category?: string }): Product {
     return this.resolveDeviceType({ name: data.name, product_family_id: data.product_family_id, specification: data.specification, unit: data.unit, system_id: data.system_id, category: data.category })
   },
-  /** 更新设备类型自身字段 */
+  /** 更新设备类型自身字段；若改动系统/分类则同步重算设备编码 */
   updateDeviceType(id: string, patch: Record<string, unknown>) {
     repository.update(T.products, id, patch)
+    if ('system_id' in patch || 'category' in patch) DeviceCode.reassignCode(id)
   },
 
   /** 设备类型主体视图：逐设备类型聚合其下配置行（型号）数量 / 品牌 / 档位覆盖 / 参考价区间。
@@ -174,15 +156,7 @@ export const DeviceCatalog = {
       .sort((a, b) => (a.product.sort_order ?? 9999) - (b.product.sort_order ?? 9999) || a.product.name.localeCompare(b.product.name))
   },
 
-  /** 子系统列表（设备中心页签数据源）：全部子系统含 count=0（U3 空态展示） */
-  deviceSystems(): { id: string; label: string; count: number }[] {
-    const counts = new Map<string, number>()
-    for (const p of repository.getTable<Product>(T.products)) {
-      const sys = p.system_id ?? '__other'
-      counts.set(sys, (counts.get(sys) ?? 0) + 1)
-    }
-    return DEVICE_SYSTEMS.map((s) => ({ ...s, count: counts.get(s.id) ?? 0 }))
-  },
+  /** 子系统列表（设备中心页签数据源）：由 DeviceSystemService.deviceSystems() 提供（读自定义 device_systems 表） */
 
   models(familyId?: string): (ProductModel & { familyId?: string })[] {
     const models = repository.getTable<ProductModel>(T.product_models)

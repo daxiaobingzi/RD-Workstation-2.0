@@ -1,13 +1,15 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Receipt, ChevronDown, Download, FolderKanban, Wallet } from 'lucide-react'
+import { Receipt, ChevronDown, Download, FolderKanban, Wallet, Search, Trash2, BadgeCheck } from 'lucide-react'
 import { useDB } from '../../db/memory-db'
 import { T, type ProjectSystem } from '../../types/domain'
 import { ProjectService, BillService, BudgetService } from '../../services'
+import { BillItemsTable } from './BillItemsTable'
+import { exportBillFlat, exportBillSplit } from './export-xlsx'
 import { PageHeader } from '../../components/ui/page-header'
-import { StatusBadge } from '../../components/ui/badge'
+import { StatusBadge, Badge } from '../../components/ui/badge'
 import { Button } from '../../components/ui/button'
-import { Table, THead, TBody, TR, TH, TD, NumCell } from '../../components/ui/table'
+import { Input, Select } from '../../components/ui/field'
 import { EmptyState } from '../../components/ui/empty'
 import { toast } from '../../components/ui/toast'
 import { fmtMoney, fmtNum, cn } from '../../lib/utils'
@@ -16,6 +18,18 @@ export function BillsPage() {
   useDB((s) => s.db)
   const navigate = useNavigate()
   const [openVersion, setOpenVersion] = useState<string | null>(null)
+  const [q, setQ] = useState('')
+  // 按项目筛选（'' = 全部项目）
+  const [projectFilter, setProjectFilter] = useState('')
+  // 删除版本（二次确认）；明细行删除已由 BillItemsTable 内部处理
+  const [confirmDel, setConfirmDel] = useState<string | null>(null)
+  const db = useDB.getState().db
+
+  const askDel = (itemId: string, cb: () => void) => {
+    if (confirmDel === itemId) { setConfirmDel(null); cb(); return }
+    setConfirmDel(itemId)
+    window.setTimeout(() => setConfirmDel((c) => (c === itemId ? null : c)), 2500)
+  }
 
   const projects = useMemo(() => {
     const all = ProjectService.list()
@@ -24,14 +38,30 @@ export function BillsPage() {
         projectId: p.id,
         projectName: p.name,
         projectCode: p.project_code,
-        versions: BillService.versions(p.id),
+        clientName: p.client_name,
+        // 全局清单页汇总「各项目已确认（confirmed）的最终版本」
+        versions: BillService.versions(p.id).filter((v) => v.status === 'confirmed'),
         budgetTotal: BudgetService.byProject(p.id).reduce((s, b) => s + b.total_amount, 0),
       }))
       .filter((r) => r.versions.length || r.budgetTotal > 0)
-  }, [])
+  }, [db])
+
+  // 项目清单展示列：项目筛选 + 搜索过滤（名称/编号/业主）+ 有版本的按最近版本时间倒序，无版本（仅预算）排末尾
+  const visibleProjects = useMemo(() => {
+    const kw = q.trim().toLowerCase()
+    let filtered = projectFilter ? projects.filter((p) => p.projectId === projectFilter) : projects
+    if (kw) filtered = filtered.filter((p) => [p.projectName, p.projectCode, p.clientName].some((v) => v?.toLowerCase().includes(kw)))
+    return [...filtered].sort((a, b) => {
+      const ta = a.versions[0]?.created_at ?? ''
+      const tb = b.versions[0]?.created_at ?? ''
+      if (ta && tb) return tb.localeCompare(ta)
+      if (ta) return -1
+      if (tb) return 1
+      return 0
+    })
+  }, [projects, q, projectFilter])
 
   const budgets = useMemo(() => {
-    const db = useDB.getState().db
     const systemMap = new Map(db[T.systems].map((s) => [s.id, s as unknown as { name: string; code: string }]))
     const familyName = new Map((db[T.product_families] ?? []).map((f) => [f.id, (f as unknown as { name: string }).name]))
     const productFam = new Map((db[T.products] ?? []).map((p) => [p.id, (p as unknown as { product_family_id: string }).product_family_id]))
@@ -66,27 +96,54 @@ export function BillsPage() {
         }
       })
       .filter((r) => r.total > 0)
-  }, [])
+  }, [db])
 
   const versionCount = projects.reduce((s, p) => s + p.versions.length, 0)
   const itemCount = projects.reduce((s, p) => s + p.versions.reduce((x, v) => x + BillService.items(v.id).length, 0), 0)
   const budgetTotal = budgets.reduce((s, r) => s + r.total, 0)
+  // 项目 id → 名称，供系统预算卡片标注所属项目（多项目同名系统可区分）
+  const projectNameOf = useMemo(() => new Map(projects.map((p) => [p.projectId, p.projectName])), [projects])
+  // 系统预算按项目筛选（与左侧清单面板联动）
+  const visibleBudgets = useMemo(
+    () => (projectFilter ? budgets.filter((r) => r.ps.project_id === projectFilter) : budgets),
+    [budgets, projectFilter],
+  )
 
-  const exportVersion = (projectId: string, versionId: string, label: string) => {
-    const csv = BillService.exportCSV(versionId)
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${projectId}-清单-${label}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
-    toast('清单已导出 CSV')
+  const exportVersion = (projectId: string, versionId: string, label: string, mode: 'flat' | 'split') => {
+    if (mode === 'flat') { exportBillFlat(projectId, versionId); toast(`已导出整表分组 Excel（${label}）`) }
+    else { exportBillSplit(projectId, versionId); toast(`已导出按系统分 Sheet 的 Excel（${label}）`) }
   }
 
   return (
     <div className="mx-auto max-w-[1080px] space-y-4 p-5">
-      <PageHeader title="清单" subtitle="项目清单 · 版本 · 系统预算 · 导出" />
+      <PageHeader
+        title="清单"
+        subtitle="各项目已确认最终清单 · 版本管理 · 预算 · 导出"
+        actions={
+          <div className="flex items-center gap-2">
+            <span className="text-[11.5px] text-muted">按项目筛选</span>
+            <Select
+              value={projectFilter}
+              onChange={(e) => setProjectFilter(e.target.value)}
+              className="h-7 w-44 text-[12.5px]"
+            >
+              <option value="">全部项目</option>
+              {projects.map((p) => (
+                <option key={p.projectId} value={p.projectId}>{p.projectName}</option>
+              ))}
+            </Select>
+            {projectFilter && (
+              <button
+                type="button"
+                onClick={() => setProjectFilter('')}
+                className="rounded-full bg-surface-subtle px-2 py-0.5 text-[11px] text-muted hover:text-danger"
+              >
+                清除筛选
+              </button>
+            )}
+          </div>
+        }
+      />
 
       {/* KPI */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -103,10 +160,14 @@ export function BillsPage() {
             <div className="flex items-center gap-2 border-b border-rule px-3.5 py-2.5">
               <Receipt className="size-4 text-accent" />
               <h3 className="text-[13px] font-semibold">项目清单</h3>
-              <span className="rounded-full bg-surface-subtle px-1.5 text-[10.5px] text-muted">{projects.length}</span>
+              <span className="rounded-full bg-surface-subtle px-1.5 text-[10.5px] text-muted">{visibleProjects.length}</span>
+              <div className="relative ml-auto">
+                <Search className="absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-faint" />
+                <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索项目 / 编号…" className="h-7 w-48 pl-7 text-[12.5px]" />
+              </div>
             </div>
             <div className="space-y-3 p-3.5">
-              {projects.map((p) => (
+              {visibleProjects.map((p) => (
                 <div key={p.projectId} className="rounded-lg border border-rule">
                   <div className="flex items-center gap-2 border-b border-rule bg-surface-subtle/40 px-3 py-2">
                     <span className="font-mono text-[10.5px] text-faint">{p.projectCode}</span>
@@ -120,6 +181,7 @@ export function BillsPage() {
                       const total = items.reduce((s, i) => s + i.amount, 0)
                       const summary = BillService.summary(v.id)
                       const open = openVersion === v.id
+                      const locked = v.status === 'confirmed'
                       return (
                         <div key={v.id} className="rounded-md border border-rule px-2.5 py-2">
                           <div className="flex items-center gap-2">
@@ -132,31 +194,42 @@ export function BillsPage() {
                               {v.version_no}
                             </button>
                             <span className="text-[11.5px] text-muted">{v.name}</span>
-                            <StatusBadge status={v.status ?? 'draft'} />
+                            {v.status === 'confirmed'
+                              ? <Badge variant="ok"><BadgeCheck className="size-3" />已确认</Badge>
+                              : <><StatusBadge status={v.status ?? 'draft'} />
+                                  <button
+                                    type="button"
+                                    title="确认版本后冻结状态"
+                                    onClick={() => { BillService.setVersionStatus(v.id, 'confirmed'); toast(`版本 ${v.version_no} 已确认`) }}
+                                    className="rounded-full border border-ok/40 px-1.5 py-0.5 text-[10.5px] font-medium text-ok hover:bg-ok-soft"
+                                  >
+                                    <BadgeCheck className="size-3" />确认
+                                  </button>
+                                </>}
                             <span className="ml-auto font-mono text-[12px] text-muted">{fmtNum(items.length)} 项 · {fmtMoney(total)}</span>
-                            <Button size="xs" variant="outline" onClick={() => exportVersion(p.projectId, v.id, v.version_no)}>
-                              <Download className="size-3" />导出
+                            <Button size="xs" variant="outline" title="整表分组（全部系统一 Sheet）+ 汇总 Sheet" onClick={() => exportVersion(p.projectId, v.id, v.version_no, 'flat')}>
+                              <Download className="size-3" />Excel 整表
                             </Button>
+                            <Button size="xs" variant="outline" title="每系统一个 Sheet + 汇总 Sheet" onClick={() => exportVersion(p.projectId, v.id, v.version_no, 'split')}>
+                              <Download className="size-3" />Excel 分系统
+                            </Button>
+                            <button
+                              type="button"
+                              title={confirmDel === `v-${v.id}` ? '再次点击确认删除整个版本' : '删除整个版本（需两次点击确认，不可恢复）'}
+                              aria-label={confirmDel === `v-${v.id}` ? `再次点击确认删除版本 ${v.version_no}` : `删除版本 ${v.version_no}`}
+                              onClick={() => askDel(`v-${v.id}`, () => { BillService.remove(v.id); toast(`版本 ${v.version_no} 已删除`, 'info') })}
+                              className={cn(
+                                'rounded p-1 transition-colors',
+                                confirmDel === `v-${v.id}` ? 'bg-danger text-white' : 'text-faint hover:bg-hover hover:text-danger',
+                              )}
+                            >
+                              {confirmDel === `v-${v.id}` && <span className="mr-1 text-[10px] font-medium">确认？</span>}
+                              <Trash2 className="size-3.5" />
+                            </button>
                           </div>
                           {open && (
                             <div className="mt-2">
-                              <div className="overflow-auto rounded-md border border-rule">
-                                <Table>
-                                  <THead><TR><TH>编码</TH><TH>名称</TH><TH>类别</TH><TH>数量</TH><TH>单价</TH><TH>金额</TH></TR></THead>
-                                  <TBody>
-                                    {items.map((i) => (
-                                      <TR key={i.id}>
-                                        <TD><NumCell>{i.item_code}</NumCell></TD>
-                                        <TD className="font-medium">{i.item_name}</TD>
-                                        <TD className="text-muted">{i.category}</TD>
-                                        <TD><NumCell>{fmtNum(i.quantity)}</NumCell></TD>
-                                        <TD className="font-mono text-[12px] text-muted">{fmtMoney(i.unit_price)}</TD>
-                                        <TD className="font-mono text-[12.5px] font-semibold">{fmtMoney(i.amount)}</TD>
-                                      </TR>
-                                    ))}
-                                  </TBody>
-                                </Table>
-                              </div>
+                              <BillItemsTable items={items} locked={locked} />
                               {summary.length > 0 && (
                                 <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-[11.5px] text-muted">
                                   {summary.map((s) => (
@@ -164,17 +237,24 @@ export function BillsPage() {
                                   ))}
                                 </div>
                               )}
+                              {v.status === 'confirmed' && (
+                                <p className="mt-1 text-[11px] text-faint">已确认版本不可再调整，如需修改请新建版本或撤销确认。</p>
+                              )}
                             </div>
                           )}
                         </div>
                       )
                     })}
-                    {!p.versions.length && <p className="px-1 py-1 text-[12px] text-faint">暂无清单版本</p>}
+                    {!p.versions.length && <p className="px-1 py-1 text-[12px] text-faint">暂无已确认清单版本</p>}
                   </div>
                 </div>
               ))}
-              {!projects.length && (
-                <EmptyState icon={<Receipt />} title="暂无清单" description="在系统设计工作区生成设备选型后即可生成清单" />
+              {!visibleProjects.length && (
+                <EmptyState
+                  icon={<Receipt />}
+                  title={q.trim() ? '未找到匹配项目' : '暂无已确认清单'}
+                  description={q.trim() ? '换个关键词试试（项目名称 / 编号）' : '到项目中心 → 预算页点击「确认生成清单」并确认版本后，此处汇总各项目最终清单'}
+                />
               )}
             </div>
           </div>
@@ -186,23 +266,26 @@ export function BillsPage() {
             <div className="flex items-center gap-2 border-b border-rule px-3.5 py-2.5">
               <Wallet className="size-4 text-accent" />
               <h3 className="text-[13px] font-semibold">系统预算</h3>
-              <span className="rounded-full bg-surface-subtle px-1.5 text-[10.5px] text-muted">{budgets.length}</span>
+              <span className="rounded-full bg-surface-subtle px-1.5 text-[10.5px] text-muted">{visibleBudgets.length}</span>
             </div>
             <div className="space-y-2.5 p-3.5">
-              {budgets.map((r) => {
+              {visibleBudgets.map((r) => {
                 const maxFam = Math.max(...r.family.map((f) => f.amount), 1)
                 const maxGrade = Math.max(...r.grades.map((g) => g.total), 1)
                 return (
                   <button
                     key={r.ps.id}
                     type="button"
-                    onClick={() => navigate(`/projects/${r.ps.project_id}/systems/${r.ps.id}`)}
+                    onClick={() => navigate(`/projects-v2/${r.ps.project_id}/derive`)}
                     className="block w-full rounded-lg border border-rule bg-surface-subtle/40 p-3 text-left transition-colors hover:border-accent/40 hover:bg-hover"
                   >
                     <div className="flex items-center gap-2">
                       <span className="font-mono text-[10.5px] text-faint">{r.systemCode}</span>
-                      <span className="text-[13px] font-semibold">{r.systemName}</span>
-                      <span className="ml-auto font-mono text-[14px] font-bold text-ink">{fmtMoney(r.total)}</span>
+                      <span className="min-w-0 flex-1 truncate">
+                        <span className="text-[13px] font-semibold">{r.systemName}</span>
+                        <span className="ml-1.5 text-[10.5px] text-faint">· {projectNameOf.get(r.ps.project_id) ?? '未知项目'}</span>
+                      </span>
+                      <span className="ml-auto shrink-0 font-mono text-[14px] font-bold text-ink">{fmtMoney(r.total)}</span>
                     </div>
                     {r.family.length > 0 && (
                       <div className="mt-2 space-y-1">
@@ -234,8 +317,8 @@ export function BillsPage() {
                   </button>
                 )
               })}
-              {!budgets.length && (
-                <EmptyState icon={<Wallet />} title="暂无系统预算" description="生成清单后为系统生成预算" />
+              {!visibleBudgets.length && (
+                <EmptyState icon={<Wallet />} title={projectFilter ? '该项目暂无系统预算' : '暂无系统预算'} description="生成清单后为系统生成预算" />
               )}
             </div>
           </div>

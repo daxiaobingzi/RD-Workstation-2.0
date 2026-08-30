@@ -1,21 +1,22 @@
 import { useState } from 'react'
-import { DeviceService, DEVICE_SYSTEMS, DEVICE_CATEGORIES } from '../../../services'
+import { DeviceService, DEVICE_CATEGORIES } from '../../../services'
 import type { Product } from '../../../types/domain'
 import { Button } from '../../../components/ui/button'
-import { Input, Select, Field } from '../../../components/ui/field'
+import { Input, Select, Field, Textarea } from '../../../components/ui/field'
 import { Modal } from '../../../components/ui/dialog'
 import { toast } from '../../../components/ui/toast'
-import { RichTextEditor } from '../../../components/ui/rich-text'
+import { htmlToPlainText } from '../../../components/ui/rich-text'
 
 /* ---------- 编辑设备类型（通用参数/归属）---------- */
 function DeviceTypeFormModal({
   open, onClose, product,
 }: { open: boolean; onClose: () => void; product?: Product }) {
+  const systems = DeviceService.deviceSystems()
   const [form, setForm] = useState(() => ({
-    system_id: product?.system_id ?? 'sys_vss',
+    system_id: product?.system_id ?? systems[0]?.id ?? 'sys_vss',
     category: product?.category ?? 'front',
     name: product?.name ?? '',
-    generic: product?.specification ?? '',
+    generic: htmlToPlainText(product?.specification ?? ''),
     unit: product?.unit ?? '台',
   }))
 
@@ -24,11 +25,12 @@ function DeviceTypeFormModal({
   const save = () => {
     if (!form.name.trim()) { toast('请填写设备名称', 'warn'); return }
     if (!product) return
+    const moved = form.system_id !== product.system_id
     DeviceService.updateDeviceType(product.id, {
       name: form.name.trim(), specification: form.generic || undefined, unit: form.unit || undefined,
       system_id: form.system_id, category: form.category,
     })
-    toast('设备类型已更新')
+    toast(moved ? `设备已移至「${systems.find((s) => s.id === form.system_id)?.label ?? ''}」并重新分配编码` : '设备类型已更新')
     onClose()
   }
 
@@ -37,8 +39,8 @@ function DeviceTypeFormModal({
       <div className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <Field label="子系统" required>
-            <Select value={form.system_id} disabled onChange={(e) => setForm({ ...form, system_id: e.target.value })} className="h-7 text-[12px]">
-              {DEVICE_SYSTEMS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+            <Select value={form.system_id} onChange={(e) => setForm({ ...form, system_id: e.target.value })} className="h-7 text-[12px]">
+              {systems.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
             </Select>
           </Field>
           <Field label="类别" required>
@@ -57,8 +59,8 @@ function DeviceTypeFormModal({
             </Select>
           </Field>
         </div>
-        <Field label="通用参数（富文本）">
-          <RichTextEditor value={form.generic} onChange={(html) => setForm({ ...form, generic: html })} height={150} placeholder="设备的通用参数，如图像/夜视/防护能力等…" />
+        <Field label="通用参数">
+          <Textarea value={form.generic} onChange={(e) => setForm({ ...form, generic: e.target.value })} rows={6} placeholder="设备的通用参数，一行一条，如图像/夜视/防护能力等…" />
         </Field>
       </div>
       <div className="mt-4 flex justify-end gap-2">

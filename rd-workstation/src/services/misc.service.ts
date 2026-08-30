@@ -165,6 +165,13 @@ export const DocumentService = {
       .filter((d) => d.project_id === projectId && d.type === 'review_record')
       .sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''))
   },
+  /** 按子系统归类文档（v2 设计说明模块：该子系统挂载的设计说明/相关文档） */
+  listByPsId(psId: string): Document[] {
+    return repository
+      .getTable<Document>(T.documents)
+      .filter((d) => d.type !== 'review_record' && d.project_system_id === psId)
+      .sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''))
+  },
   add(projectId: string, data: Partial<Document>): Document {
     const d: Document = {
       id: uid('doc'), project_id: projectId,

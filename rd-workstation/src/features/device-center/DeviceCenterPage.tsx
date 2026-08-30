@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   Search, Plus, Boxes, Pencil, Trash2, Power, AlertTriangle, X, BadgeCheck, Users, Download, UploadCloud, TrendingUp, Percent, ShieldCheck, Info, RotateCcw, X as CloseX,
 } from 'lucide-react'
@@ -19,6 +20,7 @@ import DeviceInUseModal, { type DeviceInUseEntry } from './components/DeviceInUs
 import { MaterialQuotaEditor } from './components/MaterialQuotaEditor'
 import ChainQuotaPanel from './components/ChainQuotaPanel'
 import PriceImpactModal from './components/PriceImpactModal'
+import SystemManageModal, { SystemManageButton } from './components/SystemManageModal'
 import { StatusBadge, Badge } from '../../components/ui/badge'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/field'
@@ -26,13 +28,14 @@ import { SortableTable, type SortableColumn } from '../../components/ui/sortable
 import { PageHeader } from '../../components/ui/page-header'
 import { EmptyState } from '../../components/ui/empty'
 import { toast } from '../../components/ui/toast'
-import { htmlToText } from '../../components/ui/rich-text'
+import { htmlToText, htmlToPlainText } from '../../components/ui/rich-text'
 import { fmtMoney, fmtNum, cn } from '../../lib/utils'
 import { GRADE_LABEL, type WarnFilter } from './device-center.types'
 
 /** 设备中心：子系统页签 → 设备类型（主体）→ 品牌型号配置行（N）；详情以抽屉呈现 */
 export function DeviceCenterPage() {
   useDB((s) => s.db)
+  const [searchParams] = useSearchParams()
   const [systemId, setSystemId] = useState('sys_vss')
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
@@ -54,14 +57,35 @@ export function DeviceCenterPage() {
   const [adjustPct, setAdjustPct] = useState('')
   const [confirmId, setConfirmId] = useState<string | null>(null)
   const [inUseModal, setInUseModal] = useState<{ open: boolean; deviceName?: string; entries?: DeviceInUseEntry[] }>({ open: false })
+  const [systemManageOpen, setSystemManageOpen] = useState(false)
 
   const stats = DeviceService.stats()
   const systems = DeviceService.deviceSystems()
+
+  // URL 定位：/devices?modelId=xxx → 找到该型号所属设备类型，切到对应系统并打开详情抽屉
+  useEffect(() => {
+    const modelId = searchParams.get('modelId')
+    if (!modelId) return
+    const db = useDB.getState().db
+    const model = (db[T.product_models] ?? []).find((m) => m.id === modelId) as ProductModel | undefined
+    if (!model) return
+    const product = (db[T.products] ?? []).find((p) => p.id === model.product_id) as Product | undefined
+    setSystemId(product?.system_id ?? '__other')
+    setCategoryFilter('all')
+    setExpandedIds(new Set([model.product_id]))
+    setDetailTypeId(model.product_id)
+    setSelectedModelId(modelId)
+  }, [searchParams])
 
   const switchSystem = (id: string) => {
     setSystemId(id); setCategoryFilter('all'); setExpandedIds(new Set()); setSelectedIds(new Set()); setDetailTypeId(undefined)
   }
   const switchCategory = (code: string) => { setCategoryFilter(code); setExpandedIds(new Set()) }
+  // 当前系统被删除时回退到第一个系统
+  useEffect(() => {
+    const ids = systems.map((s) => s.id)
+    if (systemId && !ids.includes(systemId)) setSystemId(ids[0] ?? '__other')
+  }, [systems, systemId])
 
   const allTypes = useMemo<DeviceTypeView[]>(
     () => DeviceService.deviceTypes({ systemId, category: categoryFilter === 'all' ? undefined : categoryFilter }),
@@ -132,12 +156,13 @@ export function DeviceCenterPage() {
     { key: 'name', title: '设备', width: 300, minWidth: 200, render: (dt) => (
         <div>
           <div className="text-[13px] font-medium">{dt.product.name}</div>
-          {htmlToText(dt.product.specification, 40) && (
-            <div className="mt-0.5 text-[11px] text-faint">
-              <span className="mr-1 rounded bg-surface-subtle px-1 py-px text-[10px]">{catLabelOf(dt.product.category)}</span>
-              {htmlToText(dt.product.specification, 40)}
-            </div>
-          )}
+          <div className="mt-0.5 flex items-center gap-1.5">
+            {dt.product.device_code && <span className="rounded bg-accent-soft px-1 py-px font-mono text-[10.5px] text-accent" title="设备编码">{dt.product.device_code}</span>}
+            <span className="shrink-0 rounded bg-surface-subtle px-1 py-px text-[10px]">{catLabelOf(dt.product.category)}</span>
+            {htmlToText(dt.product.specification, 40) && (
+              <span className="truncate text-[11px] text-faint">{htmlToText(dt.product.specification, 40)}</span>
+            )}
+          </div>
         </div>) },
     { key: 'brands', title: '品牌备选', width: 180, render: (dt) => (
         <div className="flex max-w-[200px] flex-wrap gap-1">
@@ -198,6 +223,7 @@ export function DeviceCenterPage() {
     const sysLabel = systems.find((s) => s.id === systemId)?.label ?? ''
     const catLabel = categoryFilter !== 'all' ? catLabelOf(categoryFilter) : ''
     const rows = types.flatMap((dt) => dt.rows.map((r) => ({
+      deviceCode: dt.product.device_code ?? '',
       deviceType: dt.product.name,
       category: catLabelOf(dt.product.category),
       brand: r.brandName,
@@ -209,7 +235,7 @@ export function DeviceCenterPage() {
       price: r.unitPrice,
       status: r.m.status === 'disabled' ? '停用' : '启用',
     })))
-    const head = ['设备类型', '类别', '品牌', '型号', '通用参数', '详细参数', '单位', '档次', '参考价', '状态']
+    const head = ['设备编码', '设备类型', '类别', '品牌', '型号', '通用参数', '详细参数', '单位', '档次', '参考价', '状态']
     const esc = (v: unknown) => { const s = String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s }
     const csv = '\uFEFF' + [head, ...rows.map((x) => Object.values(x).map(esc).join(','))].join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
@@ -279,6 +305,7 @@ export function DeviceCenterPage() {
               <span className="ml-1 font-mono text-[10px] opacity-70">{s.count || ''}</span>
             </button>
           ))}
+          <SystemManageButton onClick={() => setSystemManageOpen(true)} />
         </div>
         <div className="flex flex-wrap items-center gap-1.5 border-t border-rule pt-2">
           <span className="px-1 text-[10.5px] font-medium tracking-wide text-faint uppercase">类别</span>
@@ -404,13 +431,14 @@ export function DeviceCenterPage() {
               </div>
             </div>
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
-              <p className="text-[12px] text-muted">
+              <p className="flex items-center gap-1.5 text-[12px] text-muted">
+                {detailType.product.device_code && <span className="rounded bg-accent-soft px-1.5 py-0.5 font-mono text-[10.5px] text-accent" title="设备编码">{detailType.product.device_code}</span>}
                 <span className="mr-1 rounded-full bg-surface-subtle px-1.5 py-0.5 text-[10.5px] text-muted">{catLabelOf(detailType.product.category)}</span>
                 单位 · {detailType.product.unit || '—'}
               </p>
               {htmlToText(detailType.product.specification) && (
                 <Block title="通用参数">
-                  <div className="rich-preview text-[12px] text-muted" dangerouslySetInnerHTML={{ __html: detailType.product.specification ?? '' }} />
+                  <div className="text-[12px] leading-relaxed whitespace-pre-wrap text-muted">{htmlToPlainText(detailType.product.specification)}</div>
                 </Block>
               )}
 
@@ -544,6 +572,8 @@ export function DeviceCenterPage() {
       <PriceGovernModal open={governOpen} onClose={() => setGovernOpen(false)} />
       {/* 设备删除被引用提示 */}
       <DeviceInUseModal open={inUseModal.open} onClose={() => setInUseModal({ open: false })} deviceName={inUseModal.deviceName} entries={inUseModal.entries ?? []} />
+      {/* 设备系统管理（自定义系统/删除级联） */}
+      <SystemManageModal open={systemManageOpen} onClose={() => setSystemManageOpen(false)} />
       {/* 数据分析 */}
       <DeviceAnalytics />
     </div>
