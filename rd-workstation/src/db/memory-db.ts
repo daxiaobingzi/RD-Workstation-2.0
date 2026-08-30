@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { DB, TableMap, TableName } from '../types/table-map'
-import type { Repository } from '../repositories/repository'
+import { createMemoryRepository, type Repository } from '../repositories/repository'
 
 /** 数据库表集合：冻结 Schema 的可选表映射。Web 先行阶段以内存对象承载，localStorage 持久化；
  *  后续 SQLite/Drizzle 落地时，把本层替换为 Repository 实现即可，上层不变。 */
@@ -50,10 +50,6 @@ function persist(db: DB): boolean {
   }
 }
 
-function cloneDB(db: DB): DB {
-  return structuredClone(db)
-}
-
 let repositoryRef: Repository | null = null
 
 export const useDB = create<DBState>((set, get) => {
@@ -74,8 +70,7 @@ export const useDB = create<DBState>((set, get) => {
     where: <K extends TableName>(t: K, pred: (row: TableMap[K]) => boolean) => (get().db[t] ?? []).filter(pred),
     insert: <K extends TableName>(t: K, row: TableMap[K]) => {
       const db = get().db
-      const rows = [...(db[t] ?? []), row]
-      const next = { ...db, [t]: rows } as DB
+      const next = { ...db, [t]: [...(db[t] ?? []), row] } as DB
       const saved = persist(next)
       set({ db: next, persistenceStatus: saved ? 'saved' : 'error', persistenceError: saved ? null : '本地数据保存失败，请及时导出备份', lastPersistedAt: saved ? Date.now() : get().lastPersistedAt })
     },
@@ -87,8 +82,7 @@ export const useDB = create<DBState>((set, get) => {
     },
     update: <K extends TableName>(t: K, id: string, patch: Partial<TableMap[K]>) => {
       const db = get().db
-      const rows = (db[t] ?? []).map((row) => row.id === id ? { ...row, ...patch } : row) as TableMap[K][]
-      const next = { ...db, [t]: rows } as DB
+      const next = { ...db, [t]: (db[t] ?? []).map((row) => row.id === id ? { ...row, ...patch } : row) } as DB
       const saved = persist(next)
       set({ db: next, persistenceStatus: saved ? 'saved' : 'error', persistenceError: saved ? null : '本地数据保存失败，请及时导出备份', lastPersistedAt: saved ? Date.now() : get().lastPersistedAt })
     },
@@ -127,6 +121,20 @@ export const useDB = create<DBState>((set, get) => {
   }
   return state
 })
+
+repositoryRef = createMemoryRepository(
+  () => useDB.getState().db,
+  (next) => {
+    const saved = persist(next)
+    const current = useDB.getState()
+    useDB.setState({
+      db: next,
+      persistenceStatus: saved ? 'saved' : 'error',
+      persistenceError: saved ? null : '本地数据保存失败，请及时导出备份',
+      lastPersistedAt: saved ? Date.now() : current.lastPersistedAt,
+    })
+  },
+)
 
 export function getDBRepository(): Repository {
   if (!repositoryRef) {
