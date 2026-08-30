@@ -1,6 +1,24 @@
 import { repository } from '../db/memory-db'
 import { T } from '../types/domain'
-import type { Project, ProjectSystem, StandardSystem, Building, TelecomRoom } from '../types/domain'
+import type {
+  BillItem,
+  BillVersion,
+  Budget,
+  BudgetItem,
+  Building,
+  DesignParameter,
+  DesignResult,
+  DeviceSelection,
+  Document,
+  Point,
+  Project,
+  ProjectSystem,
+  Revision,
+  Schedule,
+  StandardSystem,
+  Task,
+  TelecomRoom,
+} from '../types/domain'
 import type { TableMap, TableName } from '../types/table-map'
 import { uid } from '../lib/utils'
 
@@ -53,9 +71,15 @@ export const ProjectService = {
   archive(id: string) {
     repository.update(T.projects, id, { archived_at: nowIso() })
   },
-  /** 恢复归档项目：清空 archived_at（合并 patch 置 undefined，!archived_at 过滤对 undefined 生效） */
+  /** 恢复归档项目：清空 archived_at，同时保留项目其它字段不变。 */
   restore(id: string) {
-    repository.update(T.projects, id, { archived_at: undefined })
+    const project = repository.getById<Project>(T.projects, id)
+    if (!project || !project.archived_at) return
+    const { archived_at: _archivedAt, ...activeProject } = project
+    repository.transaction((tx) => {
+      tx.remove(T.projects, id)
+      tx.insert(T.projects, activeProject)
+    })
   },
   get(id: string): Project | undefined {
     return repository.getById<Project>(T.projects, id)
@@ -98,10 +122,10 @@ export const ProjectService = {
       repository.getTable<TelecomRoom>(T.telecom_rooms).filter((r) => bldIds.has(r.building_id)).map((r) => r.id),
     )
     const billIds = new Set(
-      repository.getTable<{ id: string; project_id?: string }>(T.bill_versions).filter((r) => r.project_id === id).map((r) => r.id),
+      repository.getTable<BillVersion>(T.bill_versions).filter((r) => r.project_id === id).map((r) => r.id),
     )
     const budgetIds = new Set(
-      repository.getTable<{ id: string; project_id?: string }>(T.budgets).filter((r) => r.project_id === id).map((r) => r.id),
+      repository.getTable<Budget>(T.budgets).filter((r) => r.project_id === id).map((r) => r.id),
     )
     const hasPs = (psId?: string) => !!psId && psIds.has(psId)
     const hasBld = (bldId?: string) => !!bldId && bldIds.has(bldId)
@@ -109,23 +133,26 @@ export const ProjectService = {
 
     repository.transaction((tx) => {
       tx.remove(T.projects, id)
-      tx.removeMany(T.project_systems, (r) => (r as ProjectSystem).project_id === id)
-      tx.removeMany(T.buildings, (r) => (r as Building).project_id === id)
-      tx.removeMany(T.telecom_rooms, (r) => hasBld((r as TelecomRoom).building_id))
-      tx.removeMany(T.design_parameters, (r) => hasPs((r as { project_system_id?: string }).project_system_id))
-      tx.removeMany(T.points, (r) => hasPs((r as { project_system_id?: string }).project_system_id) || hasRoom((r as { telecom_room_id?: string }).telecom_room_id))
-      tx.removeMany(T.design_results, (r) => hasPs((r as { project_system_id?: string }).project_system_id))
-      tx.removeMany(T.device_selections, (r) => hasPs((r as { project_system_id?: string }).project_system_id))
-      tx.removeMany(T.tasks, (r) => (r as { project_id?: string }).project_id === id)
-      tx.removeMany(T.schedules, (r) => (r as { project_id?: string }).project_id === id || hasPs((r as { project_system_id?: string }).project_system_id))
-      tx.removeMany(T.bill_versions, (r) => (r as { project_id?: string }).project_id === id)
-      tx.removeMany(T.bill_items, (r) => billIds.has((r as { bill_version_id?: string }).bill_version_id ?? ''))
-      tx.removeMany(T.budgets, (r) => (r as { project_id?: string }).project_id === id)
-      tx.removeMany(T.budget_items, (r) => budgetIds.has((r as { budget_id?: string }).budget_id ?? ''))
-      tx.removeMany(T.documents, (r) => (r as { project_id?: string }).project_id === id)
+      tx.removeMany(T.project_systems, (r) => r.project_id === id)
+      tx.removeMany(T.buildings, (r) => r.project_id === id)
+      tx.removeMany(T.telecom_rooms, (r) => hasBld(r.building_id))
+      tx.removeMany(T.design_parameters, (r) => hasPs(r.project_system_id))
+      tx.removeMany(T.points, (r) => hasPs(r.project_system_id) || hasRoom(r.telecom_room_id))
+      tx.removeMany(T.design_results, (r) => hasPs(r.project_system_id))
+      tx.removeMany(T.device_selections, (r) => hasPs(r.project_system_id))
+      tx.removeMany(T.tasks, (r) => r.project_id === id)
+      tx.removeMany(T.schedules, (r) => r.project_id === id || hasPs(r.project_system_id))
+      tx.removeMany(T.bill_versions, (r) => r.project_id === id)
+      tx.removeMany(T.bill_items, (r) => billIds.has(r.bill_version_id))
+      tx.removeMany(T.budgets, (r) => r.project_id === id)
+      tx.removeMany(T.budget_items, (r) => budgetIds.has(r.budget_id))
+      tx.removeMany(T.documents, (r) => r.project_id === id)
       tx.removeMany(T.revisions, (r) => {
-        const snap = (r as { snapshot_json?: { project_system_id?: string } }).snapshot_json
-        return (r as { entity_type?: string }).entity_type === 'point' && hasPs(snap?.project_system_id)
+        if (r.entity_type !== 'point') return false
+        const snap = r.snapshot_json
+        if (!snap || typeof snap !== 'object' || Array.isArray(snap)) return false
+        const projectSystemId = (snap as { project_system_id?: unknown }).project_system_id
+        return typeof projectSystemId === 'string' && hasPs(projectSystemId)
       })
     })
   },
@@ -197,7 +224,7 @@ export const ProjectService = {
     repository.update(T.telecom_rooms, id, patch)
   },
   removeTelecomRoom(id: string): { ok: boolean; reason?: string } {
-    const inUse = repository.getTable<{ telecom_room_id?: string }>(T.points).some((p) => p.telecom_room_id === id)
+    const inUse = repository.getTable<Point>(T.points).some((p) => p.telecom_room_id === id)
     if (inUse) return { ok: false, reason: '该弱电间仍有点位引用，请先调整点位' }
     repository.remove(T.telecom_rooms, id)
     return { ok: true }
@@ -210,9 +237,9 @@ export const ProjectService = {
     const psIds = new Set(systems.map((s) => s.id))
     const buildings = repository.getTable<Building>(T.buildings).filter((b) => b.project_id === projectId)
     const bldIds = new Set(buildings.map((b) => b.id))
-    const billVersions = repository.getTable<{ id: string; project_id?: string }>(T.bill_versions).filter((v) => v.project_id === projectId)
+    const billVersions = repository.getTable<BillVersion>(T.bill_versions).filter((v) => v.project_id === projectId)
     const billIds = new Set(billVersions.map((v) => v.id))
-    const budgets = repository.getTable<{ id: string; project_id?: string }>(T.budgets).filter((b) => b.project_id === projectId)
+    const budgets = repository.getTable<Budget>(T.budgets).filter((b) => b.project_id === projectId)
     const budgetIds = new Set(budgets.map((b) => b.id))
     const pick = (table: string, pred: (r: { [k: string]: unknown }) => boolean) => (db[table] ?? []).filter((r) => pred(r as { [k: string]: unknown }))
     const payload: Record<string, unknown[]> = {
