@@ -26,6 +26,8 @@ export interface Repository {
   update<K extends TableName>(table: K, id: string, patch: Partial<TableMap[K]>): void
   update(table: string, id: string, patch: Record<string, unknown>): void
 
+  /** 删除操作同样优先使用冻结 Schema 表名；保留 string 重载兼容历史调用。 */
+  remove<K extends TableName>(table: K, id: string): void
   remove(table: string, id: string): void
   removeMany(table: string, pred: (row: Row) => boolean): void
 
