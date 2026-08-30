@@ -136,9 +136,9 @@ repositoryRef = createMemoryRepository(
   },
 )
 
+/** 向旧 Service API 提供稳定的 Repository 实例；新代码可直接依赖 repositories/repository。 */
+export const repository: Repository = repositoryRef
+
 export function getDBRepository(): Repository {
-  if (!repositoryRef) {
-    throw new Error('Repository 尚未初始化')
-  }
-  return repositoryRef
+  return repository
 }
