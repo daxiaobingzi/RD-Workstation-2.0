@@ -21,4 +21,7 @@ export interface Repository {
   removeMany<K extends TableName>(table: K, pred: (row: TableMap[K]) => boolean): void
 
   replace<K extends TableName>(table: K, rows: TableMap[K][]): void
+
+  /** 多步写操作在内存中完成，最终只持久化一次；任一步抛错则整批不提交。 */
+  transaction<T>(fn: (tx: Repository) => T): T
 }
