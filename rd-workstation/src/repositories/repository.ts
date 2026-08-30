@@ -1,5 +1,4 @@
-import type { DB } from '../db/memory-db'
-import type { TableMap, TableName } from '../types/table-map'
+import type { DB, TableMap, TableName } from '../types/table-map'
 
 /** 表级泛型同步 Repository：Service 只依赖本接口，SQLite 阶段替换实现即可 */
 export interface Repository {
