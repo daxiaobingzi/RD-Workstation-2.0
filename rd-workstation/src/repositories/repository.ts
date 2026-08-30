@@ -1,12 +1,13 @@
+import type { DB } from '../db/memory-db'
 import type { Row } from '../types/domain'
 import type { TableMap, TableName } from '../types/table-map'
 
 /** 表级泛型同步 Repository：Service 只依赖本接口，SQLite 阶段替换实现即可 */
 export interface Repository {
   /** 当前整库快照（只读） */
-  readonly db: Partial<{ [K in TableName]: TableMap[K][] }>
+  readonly db: DB
 
-  /** 根据冻结表名自动推导行类型；保留泛型重载兼容现有 Service 调用。 */
+  /** 表名为冻结 Schema 时自动推导行类型；保留泛型重载兼容现有 Service 调用。 */
   getTable<K extends TableName>(table: K): TableMap[K][]
   getTable<T>(table: string): T[]
 
