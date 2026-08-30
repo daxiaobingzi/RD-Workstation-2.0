@@ -3,7 +3,8 @@ import { useSearchParams } from 'react-router-dom'
 import {
   Search, Plus, Boxes, Pencil, Trash2, Power, AlertTriangle, X, BadgeCheck, Users, Download, UploadCloud, TrendingUp, Percent, ShieldCheck, Info, RotateCcw, X as CloseX,
 } from 'lucide-react'
-import { useDB, useDBTables } from '../../db/memory-db'
+import { useDB } from '../../db/memory-db'
+import { useDBTables } from '../../db/selectors'
 import { T, type ProductModel, type Brand, type Supplier, type Product } from '../../types/domain'
 import { DeviceService, DEVICE_CATEGORIES, type DeviceTypeView } from '../../services'
 import { DeviceImportModal } from './importers/DeviceImport'
