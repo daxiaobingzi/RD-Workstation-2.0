@@ -147,15 +147,17 @@ const budgetItem: BudgetItem = {
 
 const document: Document = {
   id: 'test-document',
+  title: '测试文档',
   project_id: projectId,
-  name: '测试文档',
-} as Document
+}
 
 const revision: Revision = {
   id: 'test-revision',
   entity_type: 'point',
+  entity_id: point.id,
   snapshot_json: { project_system_id: projectSystemId },
-} as Revision
+  created_at: '2026-01-01T00:00:00.000Z',
+}
 
 beforeEach(() => {
   repository.replace(T.projects, [project])
