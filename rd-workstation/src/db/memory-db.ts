@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import type { Row } from '../types/domain'
 import type { TableMap, TableName } from '../types/table-map'
 import type { Repository } from '../repositories/repository'
 
