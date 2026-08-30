@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import {
   Search, Plus, Boxes, Pencil, Trash2, Power, AlertTriangle, X, BadgeCheck, Users, Download, UploadCloud, TrendingUp, Percent, ShieldCheck, Info, RotateCcw, X as CloseX,
 } from 'lucide-react'
-import { useDB } from '../../db/memory-db'
+import { useDB, useDBTables } from '../../db/memory-db'
 import { T, type ProductModel, type Brand, type Supplier, type Product } from '../../types/domain'
 import { DeviceService, DEVICE_CATEGORIES, type DeviceTypeView } from '../../services'
 import { DeviceImportModal } from './importers/DeviceImport'
@@ -34,7 +34,24 @@ import { GRADE_LABEL, type WarnFilter } from './device-center.types'
 
 /** 设备中心：子系统页签 → 设备类型（主体）→ 品牌型号配置行（N）；详情以抽屉呈现 */
 export function DeviceCenterPage() {
-  useDB((s) => s.db)
+  // 设备中心只订阅自身数据域，避免任务、预算、文档等无关表变化触发整页重渲染。
+  useDBTables([
+    T.products,
+    T.product_models,
+    T.model_brands,
+    T.brands,
+    T.prices,
+    T.grades,
+    T.product_families,
+    T.device_categories,
+    T.device_systems,
+    T.device_selections,
+    T.bill_items,
+    T.project_systems,
+    T.projects,
+    T.device_materials,
+    T.model_grade_bindings,
+  ] as const)
   const [searchParams] = useSearchParams()
   const [systemId, setSystemId] = useState('sys_vss')
   const [categoryFilter, setCategoryFilter] = useState('all')
@@ -89,7 +106,7 @@ export function DeviceCenterPage() {
 
   const allTypes = useMemo<DeviceTypeView[]>(
     () => DeviceService.deviceTypes({ systemId, category: categoryFilter === 'all' ? undefined : categoryFilter }),
-    [systemId, categoryFilter, useDB.getState().db],
+    [systemId, categoryFilter],
   )
 
   const types = useMemo(() => {
@@ -110,8 +127,7 @@ export function DeviceCenterPage() {
         const hay = [dt.product.name, dt.product.specification, dt.product.unit, ...dt.brandNames, ...dt.rows.map((r) => r.m.model)].join(' ').toLowerCase()
         return hay.includes(kw)
       })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allTypes, q, gradeFilter, warnFilter, useDB.getState().db])
+  }, [allTypes, q, gradeFilter, warnFilter])
 
   const totalRows = types.reduce((s, t) => s + t.rows.length, 0)
   const [displayRows, setDisplayRows] = useState<DeviceTypeView[]>(types)
@@ -655,9 +671,15 @@ function ModelRowsExpanded({
 
 /* ---------- 设备类型使用情况（其下型号引用聚合） ---------- */
 function TypeUsage({ productId }: { productId: string }) {
-  const db = useDB((s) => s.db)
+  const [productModels, deviceSelections, billItems, projectSystems, projects] = useDBTables([
+    T.product_models,
+    T.device_selections,
+    T.bill_items,
+    T.project_systems,
+    T.projects,
+  ] as const)
   const agg = useMemo(() => {
-    const models = (db[T.product_models] ?? []).filter((m) => (m as ProductModel).product_id === productId) as ProductModel[]
+    const models = productModels.filter((m) => m.product_id === productId)
     const names = new Set<string>()
     let qty = 0
     let amount = 0
@@ -670,7 +692,7 @@ function TypeUsage({ productId }: { productId: string }) {
       selectionCount += u.selectionCount
     }
     return { projectNames: [...names], totalQty: qty, totalAmount: amount, selectionCount }
-  }, [productId, db])
+  }, [productId, productModels, deviceSelections, billItems, projectSystems, projects])
   return (
     <div>
       <div className="grid grid-cols-3 gap-2 text-center">
