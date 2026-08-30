@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { Row } from '../types/domain'
+import type { TableMap, TableName } from '../types/table-map'
 import type { Repository } from '../repositories/repository'
 
 /** 数据库表集合：{ 表名: 行[] }。Web 先行阶段以内存对象承载，localStorage 持久化；
@@ -116,14 +117,33 @@ export const useDB = create<DBState>((set, get) => ({
 
 export class MemoryRepository implements Repository {
   get db(): DB { return useDB.getState().db }
+
+  getTable<K extends TableName>(t: K): TableMap[K][]
+  getTable<T>(t: string): T[]
   getTable<T>(t: string): T[] { return useDB.getState().getTable<T>(t) }
+
+  getById<K extends TableName>(t: K, id: string): TableMap[K] | undefined
+  getById<T>(t: string, id: string): T | undefined
   getById<T>(t: string, id: string): T | undefined { return useDB.getState().getById<T>(t, id) }
+
+  where<K extends TableName>(t: K, pred: (row: TableMap[K]) => boolean): TableMap[K][]
+  where<T>(t: string, pred: (row: T) => boolean): T[]
   where<T>(t: string, pred: (row: T) => boolean): T[] { return useDB.getState().where<T>(t, pred) }
+
+  insert<K extends TableName>(t: K, row: TableMap[K]): void
+  insert<T extends Row>(t: string, row: T): void
   insert<T extends Row>(t: string, row: T): void { useDB.getState().insert(t, row) }
+
+  insertMany<K extends TableName>(t: K, rows: TableMap[K][]): void
+  insertMany<T extends Row>(t: string, rows: T[]): void
   insertMany<T extends Row>(t: string, rows: T[]): void { useDB.getState().insertMany(t, rows) }
+
   update(t: string, id: string, patch: Record<string, unknown>): void { useDB.getState().update(t, id, patch) }
   remove(t: string, id: string): void { useDB.getState().remove(t, id) }
   removeMany(t: string, pred: (row: Row) => boolean): void { useDB.getState().removeMany(t, pred) }
+
+  replace<K extends TableName>(t: K, rows: TableMap[K][]): void
+  replace<T extends Row>(t: string, rows: T[]): void
   replace<T extends Row>(t: string, rows: T[]): void { useDB.getState().replace(t, rows) }
 }
 /** 组合根单例：Service 经它访问数据，类型为 Repository 接口 */
