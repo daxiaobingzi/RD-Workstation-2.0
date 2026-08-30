@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Search, FolderKanban, LayoutList, Archive, ArchiveRestore, RotateCcw, Trash2, LayoutTemplate } from 'lucide-react'
 import { useDB } from '../../db/memory-db'
+import { useDBTable } from '../../db/selectors'
 import { ProjectService, FormatService } from '../../services'
 import type { Project } from '../../types/domain'
 import { StatusBadge } from '../../components/ui/badge'
@@ -27,7 +28,9 @@ const STATUS_COLUMNS = [
 
 /** 项目中心 v2 · 主页面：项目列表 + 项目模版（按业态）+ 导出/导入备份、归档、级联删除 */
 export function ProjectsV2ListPage() {
-  useDB((s) => s.db)
+  useDBTable('projects')
+  useDBTable('project_systems')
+  useDBTable('systems')
   const navigate = useNavigate()
   const [view, setView] = useState<'list' | 'board'>('list')
   const [tab, setTab] = useState<'active' | 'archived'>('active')
