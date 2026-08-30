@@ -97,7 +97,7 @@ export function ProjectPointsV2({ projectId }: { projectId: string }) {
           <Button size="sm" variant="outline" onClick={() => setImportOpen(true)}><Upload className="size-3.5" />批量导入</Button>
           <Button size="sm" variant="outline" onClick={() => { setAddMode('batch'); setAddOpen(true) }}><Plus className="size-3.5" />批量新增</Button>
           <Button size="sm" variant="outline" onClick={() => { setAddMode('single'); setAddOpen(true) }}><Plus className="size-3.5" />单个新增</Button>
-          <Button size="sm" variant="outline" onClick={() => { exportPointsXlsx(projectId); toast('已导出点位 Excel（分系统 Sheet）') }}><Download className="size-3.5" />导出 Excel</Button>
+          <Button size="sm" variant="outline" onClick={() => { void exportPointsXlsx(projectId); toast('已导出点位 Excel（分系统 Sheet）') }}><Download className="size-3.5" />导出 Excel</Button>
         </div>
       </div>
 

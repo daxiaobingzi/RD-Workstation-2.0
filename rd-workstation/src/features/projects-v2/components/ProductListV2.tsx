@@ -132,8 +132,8 @@ export function ProductListV2({ projectId }: { projectId: string }) {
         )}
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
           <Button size="sm" variant="outline" onClick={generateNew}><RefreshCw className="size-3.5" />重新生成材料表</Button>
-          <Button size="sm" variant="outline" onClick={() => { if (activeId) { exportBillFlat(projectId, activeId); toast('已导出 Excel 整表分组') } }}><Download className="size-3.5" />Excel 整表</Button>
-          <Button size="sm" variant="outline" onClick={() => { if (activeId) { exportBillSplit(projectId, activeId); toast('已导出 Excel 分系统') } }}><Download className="size-3.5" />Excel 分系统</Button>
+          <Button size="sm" variant="outline" onClick={() => { if (activeId) { void exportBillFlat(projectId, activeId); toast('已导出 Excel 整表分组') } }}><Download className="size-3.5" />Excel 整表</Button>
+          <Button size="sm" variant="outline" onClick={() => { if (activeId) { void exportBillSplit(projectId, activeId); toast('已导出 Excel 分系统') } }}><Download className="size-3.5" />Excel 分系统</Button>
         </div>
       </div>
 

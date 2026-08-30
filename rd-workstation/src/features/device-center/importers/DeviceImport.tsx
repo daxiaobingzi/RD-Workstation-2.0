@@ -1,5 +1,4 @@
 import { useRef, useState } from 'react'
-import * as XLSX from 'xlsx'
 import { ClipboardPaste, FileSpreadsheet, Download, UploadCloud, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { DeviceService, type DeviceTypeView } from '../../../services'
 import type { Brand } from '../../../types/domain'
@@ -110,6 +109,7 @@ export function DeviceImportModal({ open, onClose, defaultSystemId }: { open: bo
 
   const onFile = async (file: File) => {
     try {
+      const XLSX = await import('xlsx')
       const buf = await file.arrayBuffer()
       const wb = XLSX.read(buf)
       const ws = wb.Sheets[wb.SheetNames[0]]

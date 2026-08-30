@@ -1,7 +1,9 @@
-import * as XLSX from 'xlsx'
+import type * as XLSXNS from 'xlsx'
 import { repository } from '../../db/memory-db'
 import { T } from '../../types/domain'
 import { BillService } from '../../services'
+
+type Workbook = XLSXNS.WorkBook
 
 const CATEGORY_LABEL: Record<string, string> = {
   front: '前端设备', back: '后端设备', cable: '管材线缆', aux: '辅材', other: '其他',
@@ -78,7 +80,8 @@ function projectSystemName(psId?: string): string {
   return (sys as { name?: string } | undefined)?.name ?? '未知系统'
 }
 
-function writeWorkbook(wb: XLSX.WorkBook, projectId: string, label: string) {
+async function writeWorkbook(wb: Workbook, projectId: string, label: string) {
+  const XLSX = await import('xlsx')
   const bin = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
   const blob = new Blob([bin], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
   const url = URL.createObjectURL(blob)
@@ -90,17 +93,19 @@ function writeWorkbook(wb: XLSX.WorkBook, projectId: string, label: string) {
 }
 
 /** 方式一 · 整表分组：1 主 Sheet（全系统五区平铺）+ 1 汇总 Sheet */
-export function exportBillFlat(projectId: string, versionId: string) {
+export async function exportBillFlat(projectId: string, versionId: string) {
+  const XLSX = await import('xlsx')
   const items = BillService.items(versionId)
   const { rows } = groupRows(items)
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), '清单')
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(buildSummary(items)), '汇总')
-  writeWorkbook(wb, projectId, '整表')
+  await writeWorkbook(wb, projectId, '整表')
 }
 
 /** 方式二 · 每系统一表：每系统 1 Sheet（五区分组行）+ 1 汇总 Sheet */
-export function exportBillSplit(projectId: string, versionId: string) {
+export async function exportBillSplit(projectId: string, versionId: string) {
+  const XLSX = await import('xlsx')
   const items = BillService.items(versionId)
   const { bySystem } = groupRows(items)
   const wb = XLSX.utils.book_new()
@@ -111,5 +116,5 @@ export function exportBillSplit(projectId: string, versionId: string) {
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), name)
   }
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(buildSummary(items)), '汇总')
-  writeWorkbook(wb, projectId, '分系统')
+  await writeWorkbook(wb, projectId, '分系统')
 }

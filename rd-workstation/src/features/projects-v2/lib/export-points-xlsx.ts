@@ -1,8 +1,8 @@
-import * as XLSX from 'xlsx'
 import { PointService, ProjectService } from '../../../services'
 
 /** 项目级点位导出 Excel：每系统 1 Sheet（列=建筑/弱电间/设备名称/数量）+ 全量汇总 Sheet */
-export function exportPointsXlsx(projectId: string) {
+export async function exportPointsXlsx(projectId: string) {
+  const XLSX = await import('xlsx')
   const all = PointService.allByProject(projectId)
   const systems = ProjectService.systems(projectId)
   const wb = XLSX.utils.book_new()

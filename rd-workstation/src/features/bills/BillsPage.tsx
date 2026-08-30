@@ -110,8 +110,8 @@ export function BillsPage() {
   )
 
   const exportVersion = (projectId: string, versionId: string, label: string, mode: 'flat' | 'split') => {
-    if (mode === 'flat') { exportBillFlat(projectId, versionId); toast(`已导出整表分组 Excel（${label}）`) }
-    else { exportBillSplit(projectId, versionId); toast(`已导出按系统分 Sheet 的 Excel（${label}）`) }
+    if (mode === 'flat') { void exportBillFlat(projectId, versionId); toast(`已导出整表分组 Excel（${label}）`) }
+    else { void exportBillSplit(projectId, versionId); toast(`已导出按系统分 Sheet 的 Excel（${label}）`) }
   }
 
   return (

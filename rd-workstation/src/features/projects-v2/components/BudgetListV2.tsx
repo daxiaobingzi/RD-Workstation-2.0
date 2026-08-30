@@ -254,8 +254,8 @@ export function BudgetListV2({ projectId, mode }: { projectId: string; mode: 'bu
             ? <span className="ml-2 rounded-full bg-surface-subtle px-2 py-0.5 font-mono text-[11px] text-muted">版本 {activeVersion.version_no} · {activeVersion.status === 'confirmed' ? '已确认' : '草稿'}</span>
             : <span className="ml-2 rounded-full bg-surface-subtle px-2 py-0.5 font-mono text-[11px] text-faint">选型实时预览 · 换档即时联动</span>}
           <div className="ml-auto flex items-center gap-1.5">
-            <Button size="sm" variant="outline" onClick={() => { if (versionId) { exportBillFlat(projectId, versionId); toast('已导出 Excel 整表分组') } else { toast('请先「确认生成清单」再导出', 'warn') } }}><Download className="size-3.5" />Excel 整表</Button>
-            <Button size="sm" variant="outline" onClick={() => { if (versionId) { exportBillSplit(projectId, versionId); toast('已导出 Excel 分系统') } else { toast('请先「确认生成清单」再导出', 'warn') } }}><Download className="size-3.5" />Excel 分系统</Button>
+            <Button size="sm" variant="outline" onClick={() => { if (versionId) { void exportBillFlat(projectId, versionId); toast('已导出 Excel 整表分组') } else { toast('请先「确认生成清单」再导出', 'warn') } }}><Download className="size-3.5" />Excel 整表</Button>
+            <Button size="sm" variant="outline" onClick={() => { if (versionId) { void exportBillSplit(projectId, versionId); toast('已导出 Excel 分系统') } else { toast('请先「确认生成清单」再导出', 'warn') } }}><Download className="size-3.5" />Excel 分系统</Button>
           </div>
         </div>
 

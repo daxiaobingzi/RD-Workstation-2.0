@@ -1,18 +1,32 @@
+import { Suspense, lazy } from 'react'
 import { BrowserRouter, Navigate, Outlet, Route, Routes, useParams } from 'react-router-dom'
 import { AppShell } from './layout'
-import { TodayPage } from '../features/today/TodayPage'
-import { ProjectsV2ListPage } from '../features/projects-v2/ProjectsV2ListPage'
-import { ProjectV2Page } from '../features/projects-v2/ProjectV2Page'
-import { DeviceCenterPage } from '../features/device-center/DeviceCenterPage'
-import { BillsPage } from '../features/bills/BillsPage'
-import { GoalsPage } from '../features/goals/GoalsPage'
 import { PlaceholderPage } from './route-placeholders'
 import { Toaster } from '../components/ui/toast'
+
+// 路由懒加载：各页面按需拆包，首屏仅加载当前路由模块
+const TodayPage = lazy(() => import('../features/today/TodayPage').then((m) => ({ default: m.TodayPage })))
+const ProjectsV2ListPage = lazy(() => import('../features/projects-v2/ProjectsV2ListPage').then((m) => ({ default: m.ProjectsV2ListPage })))
+const ProjectV2Page = lazy(() => import('../features/projects-v2/ProjectV2Page').then((m) => ({ default: m.ProjectV2Page })))
+const DeviceCenterPage = lazy(() => import('../features/device-center/DeviceCenterPage').then((m) => ({ default: m.DeviceCenterPage })))
+const BillsPage = lazy(() => import('../features/bills/BillsPage').then((m) => ({ default: m.BillsPage })))
+const GoalsPage = lazy(() => import('../features/goals/GoalsPage').then((m) => ({ default: m.GoalsPage })))
 
 function Shell() {
   return (
     <AppShell>
-      <Outlet />
+      <Suspense
+        fallback={
+          <div className="flex h-full items-center justify-center text-[13px] text-muted">
+            <span className="flex items-center gap-2">
+              <span className="size-4 animate-spin rounded-full border-2 border-rule border-t-accent" />
+              加载中…
+            </span>
+          </div>
+        }
+      >
+        <Outlet />
+      </Suspense>
     </AppShell>
   )
 }
