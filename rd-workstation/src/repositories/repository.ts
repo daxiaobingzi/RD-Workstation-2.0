@@ -22,7 +22,10 @@ export interface Repository {
   insertMany<K extends TableName>(table: K, rows: TableMap[K][]): void
   insertMany<T extends Row>(table: string, rows: T[]): void
 
+  /** 表名为冻结 Schema 时，patch 自动限制为对应行类型；保留宽泛重载兼容历史调用。 */
+  update<K extends TableName>(table: K, id: string, patch: Partial<TableMap[K]>): void
   update(table: string, id: string, patch: Record<string, unknown>): void
+
   remove(table: string, id: string): void
   removeMany(table: string, pred: (row: Row) => boolean): void
 
