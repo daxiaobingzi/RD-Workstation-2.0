@@ -1,9 +1,6 @@
 import { repository } from '../db/memory-db'
 import { T } from '../types/domain'
-import type {
-  ModelGradeBinding, Grade, ProductModel, Product,
-  DeviceSelection, StandardSystem, ProjectSystem, Project, BillItem,
-} from '../types/domain'
+import type { ModelGradeBinding, ProductModel, Product } from '../types/domain'
 import { SelectionEngine } from '../engines'
 import ctx from './ctx'
 import { uid } from '../lib/utils'
