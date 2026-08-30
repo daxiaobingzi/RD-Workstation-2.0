@@ -22,8 +22,8 @@ export interface SysGroupedRow<S = string> {
 export interface SysGroupedTableProps {
   /** 按系统分组：每个系统一个面板，内含五区行 */
   systems: { systemId: string; systemName: string; items: SysGroupedRow[] }[]
-  /** 列定义（渲染表头） */
-  columns: { key: string; title: string; align?: 'left' | 'right' }[]
+  /** 列定义（渲染表头）；resizable 时 width 作为默认列宽 */
+  columns: { key: string; title: string; align?: 'left' | 'right'; width?: number }[]
   /** 单行渲染：返回一行 <td> 序列；参数为该行的原始数据 */
   renderRow: (item: SysGroupedRow) => ReactNode
   /** 小计取值：金额行返回金额，其他列返回 undefined/0 */
@@ -56,18 +56,18 @@ export function SysGroupedTable({ systems, columns, renderRow, amountOf, empty, 
       return next
     })
   }
-  /** 列宽拖动：pointer capture 在表头拖柄上调整列宽 */
+  /** 列宽：持久化优先，其次列配置默认值 */
+  const colW = (key: string) => widths[key] ?? columns.find((c) => c.key === key)?.width ?? 140
+  /** 表格总宽 = 各列宽之和：fixed 布局下每列严格等于 <col> 宽 → 拖动本列不影响其他列，整表向右顺延出滚动条 */
+  const totalW = columns.reduce((s, c) => s + colW(c.key), 0)
+  /** 列宽拖动：改 React state（colgroup 随之更新），不再直接改 th.style.width */
   const startResize = (e: React.PointerEvent, key: string) => {
     if (!resizable) return
     e.preventDefault()
-    const th = (e.currentTarget as HTMLElement).parentElement as HTMLElement | null
-    if (!th) return
     const startX = e.clientX
-    const startW = th.getBoundingClientRect().width
+    const startW = colW(key)
     const move = (ev: PointerEvent) => {
-      const w = Math.max(60, Math.min(560, startW + ev.clientX - startX))
-      th.style.width = `${w}px`
-      persistWidth(key, w)
+      persistWidth(key, Math.max(60, Math.min(560, startW + ev.clientX - startX)))
     }
     const up = () => {
       document.removeEventListener('pointermove', move)
@@ -114,12 +114,23 @@ export function SysGroupedTable({ systems, columns, renderRow, amountOf, empty, 
             </button>
             {open && (
               <div className="overflow-auto">
-                <table className="border-collapse text-[13px]">
+                <table
+                  className={cn(
+                    'border-collapse text-[13px]',
+                    resizable &&
+                      '[&_td]:overflow-hidden [&_td]:text-ellipsis [&_td]:whitespace-nowrap [&_td>*]:min-w-0 [&_th]:overflow-hidden [&_th]:text-ellipsis [&_th]:whitespace-nowrap',
+                  )}
+                  style={resizable ? { tableLayout: 'fixed', width: totalW } : undefined}
+                >
+                  {resizable && (
+                    <colgroup>
+                      {columns.map((c) => <col key={c.key} style={{ width: colW(c.key) }} />)}
+                    </colgroup>
+                  )}
                   <thead>
                     <tr className="text-left text-[10.5px] text-faint">
                       {columns.map((c) => (
-                        <th key={c.key} className={cn('relative px-3 py-1.5 font-medium whitespace-nowrap', c.align === 'right' && 'text-right')}
-                          style={resizable && widths[c.key] ? { width: widths[c.key] } : undefined}>
+                        <th key={c.key} className={cn('relative px-3 py-1.5 font-medium whitespace-nowrap', c.align === 'right' && 'text-right')}>
                           {c.title}
                           {resizable && (
                             <span

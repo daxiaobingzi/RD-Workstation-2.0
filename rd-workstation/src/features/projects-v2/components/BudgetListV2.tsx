@@ -139,18 +139,20 @@ export function BudgetListV2({ projectId, mode }: { projectId: string; mode: 'bu
   }
 
   const grouped = useMemo(() => {
-    const psMap = new Map((useDB.getState().db[T.project_systems] as { id: string; system_id: string }[]).map((p) => [p.id, p.system_id]))
-    const sysMap = new Map((useDB.getState().db[T.systems] as { id: string; name: string }[]).map((s) => [s.id, s]))
+    // 骨架 = 项目全部子系统（与点表/推导同原理）：空系统也显示分组（空态）；key 统一用 project_systems.id，避免与行分组重复
+    const nameByPs = new Map(systems.map((ps) => [ps.id, ps.systemName]))
     const map = new Map<string, { systemId: string; systemName: string; items: { section: string; row: BudgetRow }[] }>()
+    for (const ps of systems) {
+      map.set(ps.id, { systemId: ps.id, systemName: ps.systemName, items: [] })
+    }
     for (const r of rows) {
-      const sid = r.projectSystemId ? psMap.get(r.projectSystemId) : undefined
-      const key = sid ?? '__none__'
-      const entry = map.get(key) ?? { systemId: key, systemName: sid ? (sysMap.get(sid)?.name ?? '未知系统') : '未归入系统', items: [] }
+      const key = r.projectSystemId ?? '__none__'
+      const entry = map.get(key) ?? { systemId: key, systemName: key === '__none__' ? '未归入系统' : (nameByPs.get(key) ?? '未知系统'), items: [] }
       entry.items.push({ section: r.item?.deviceCategory ?? 'other', row: r })
       map.set(key, entry)
     }
     return [...map.values()]
-  }, [rows])
+  }, [rows, systems])
 
   /** 行内数量/单价调整：实时行写 device_selections，快照行同步 bill_item + budget_item */
   const tuneRow = (r: BudgetRow, patch: { quantity?: number; unit_price?: number }) => {
@@ -225,21 +227,20 @@ export function BudgetListV2({ projectId, mode }: { projectId: string; mode: 'bu
         <td className="max-w-[200px] truncate px-2.5 py-1.5 text-muted" title={i?.detail ?? ''}>{i?.detail ?? '—'}</td>
         <td className="px-2.5 py-1.5 text-right font-mono">{fmtMoney(r.unit_price)}</td>
         <td className="px-2.5 py-1.5 text-right font-mono font-semibold">{fmtMoney(r.amount)}</td>
-        <td className="max-w-[100px] truncate px-2.5 py-1.5 text-faint">{(i as { remark?: string }).remark ?? '—'}</td>
       </>
     )
   }
 
   const columns = mode === 'budget'
     ? [
-        { key: 'name', title: '设备名称' }, { key: 'spec', title: '通用参数' }, { key: 'unit', title: '单位' }, { key: 'qty', title: '数量', align: 'right' as const },
-        { key: 'grade', title: '档次' }, { key: 'brand', title: '品牌' }, { key: 'model', title: '型号' }, { key: 'detail', title: '详细参数' },
-        { key: 'price', title: '单价', align: 'right' as const }, { key: 'amount', title: '金额', align: 'right' as const }, { key: 'remark', title: '备注' }, { key: 'actions', title: '操作' },
+        { key: 'name', title: '设备名称', width: 160 }, { key: 'spec', title: '通用参数', width: 200 }, { key: 'unit', title: '单位', width: 56 }, { key: 'qty', title: '数量', align: 'right' as const, width: 76 },
+        { key: 'grade', title: '档次', width: 64 }, { key: 'brand', title: '品牌', width: 100 }, { key: 'model', title: '型号', width: 140 }, { key: 'detail', title: '详细参数', width: 200 },
+        { key: 'price', title: '单价', align: 'right' as const, width: 96 }, { key: 'amount', title: '金额', align: 'right' as const, width: 110 }, { key: 'remark', title: '备注', width: 130 }, { key: 'actions', title: '操作', width: 64 },
       ]
     : [
-        { key: 'name', title: '设备名称' }, { key: 'spec', title: '通用参数' }, { key: 'unit', title: '单位' }, { key: 'qty', title: '数量', align: 'right' as const },
-        { key: 'remark1', title: '备注' }, { key: 'brand', title: '品牌' }, { key: 'model', title: '型号' }, { key: 'detail', title: '详细参数' },
-        { key: 'price', title: '单价', align: 'right' as const }, { key: 'amount', title: '金额', align: 'right' as const }, { key: 'remark2', title: '备注' },
+        { key: 'name', title: '设备名称', width: 160 }, { key: 'spec', title: '通用参数', width: 200 }, { key: 'unit', title: '单位', width: 56 }, { key: 'qty', title: '数量', align: 'right' as const, width: 76 },
+        { key: 'remark', title: '备注', width: 110 }, { key: 'brand', title: '品牌', width: 100 }, { key: 'model', title: '型号', width: 140 }, { key: 'detail', title: '详细参数', width: 200 },
+        { key: 'price', title: '单价', align: 'right' as const, width: 96 }, { key: 'amount', title: '金额', align: 'right' as const, width: 110 },
       ]
 
   return (

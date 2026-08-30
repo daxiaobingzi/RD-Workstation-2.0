@@ -1,8 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Boxes, RefreshCw, Download, ExternalLink, FileText, X } from 'lucide-react'
 import { useDB } from '../../../db/memory-db'
-import { T } from '../../../types/domain'
-import { BillService, BudgetService } from '../../../services'
+import { BillService, BudgetService, ProjectService } from '../../../services'
 import { SysGroupedTable, SYS_SECTIONS, sectionLabel } from '../../../components/ui/sys-grouped-table'
 import { Button } from '../../../components/ui/button'
 import { Modal } from '../../../components/ui/dialog'
@@ -21,23 +20,26 @@ export function ProductListV2({ projectId }: { projectId: string }) {
   const [delVersionId, setDelVersionId] = useState('')
 
   const versions = useMemo(() => BillService.versions(projectId), [projectId, useDB.getState().db])
+  const systems = useMemo(() => ProjectService.systems(projectId), [projectId, useDB.getState().db])
   const activeId = versionId || versions[0]?.id || ''
   const items = useMemo<RichItem[]>(() => (activeId ? BillService.items(activeId) : []), [activeId, useDB.getState().db])
   const version = versions.find((v) => v.id === activeId)
 
   const grouped = useMemo(() => {
-    const psMap = new Map((useDB.getState().db[T.project_systems] as { id: string; system_id: string }[]).map((p) => [p.id, p.system_id]))
-    const sysMap = new Map((useDB.getState().db[T.systems] as { id: string; name: string }[]).map((s) => [s.id, s]))
+    // 骨架 = 项目全部子系统（与点表/推导同原理）：空系统也显示分组（空态）；key 统一用 project_systems.id
+    const nameByPs = new Map(systems.map((ps) => [ps.id, ps.systemName]))
     const map = new Map<string, { systemId: string; systemName: string; items: { section: string; row: RichItem }[] }>()
+    for (const ps of systems) {
+      map.set(ps.id, { systemId: ps.id, systemName: ps.systemName, items: [] })
+    }
     for (const i of items) {
-      const sid = i.project_system_id ? psMap.get(i.project_system_id) : undefined
-      const key = sid ?? '__other__'
-      const entry = map.get(key) ?? { systemId: key, systemName: sid ? (sysMap.get(sid)?.name ?? '未知系统') : '未归入系统', items: [] }
+      const key = i.project_system_id ?? '__other__'
+      const entry = map.get(key) ?? { systemId: key, systemName: key === '__other__' ? '未归入系统' : (nameByPs.get(key) ?? '未知系统'), items: [] }
       entry.items.push({ section: i.deviceCategory ?? 'other', row: i })
       map.set(key, entry)
     }
     return [...map.values()]
-  }, [items])
+  }, [items, systems])
 
   const generateNew = () => {
     const { version: v, items: its } = BillService.generateProject(projectId)
@@ -156,12 +158,12 @@ export function ProductListV2({ projectId }: { projectId: string }) {
         <SysGroupedTable
           systems={grouped}
           columns={[
-            { key: 'name', title: '设备名称' },
-            { key: 'spec', title: '通用参数' },
-            { key: 'unit', title: '单位' },
-            { key: 'qty', title: '数量', align: 'right' },
-            { key: 'remark', title: '备注' },
-            { key: 'actions', title: '操作' },
+            { key: 'name', title: '设备名称', width: 180 },
+            { key: 'spec', title: '通用参数', width: 240 },
+            { key: 'unit', title: '单位', width: 64 },
+            { key: 'qty', title: '数量', align: 'right', width: 80 },
+            { key: 'remark', title: '备注', width: 160 },
+            { key: 'actions', title: '操作', width: 70 },
           ]}
           renderRow={tds}
           resizable

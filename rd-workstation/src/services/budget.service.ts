@@ -1,7 +1,7 @@
 import { repository } from '../db/memory-db'
 import { T } from '../types/domain'
-import type { BillItem, Budget, BudgetItem, Product, ProductModel, ProductFamily, DeviceSelection } from '../types/domain'
-import { BudgetEngine, SelectionEngine } from '../engines'
+import type { BillItem, Budget, BudgetItem, Product, ProductModel, ProductFamily, DeviceSelection, DesignResult } from '../types/domain'
+import { BudgetEngine, SelectionEngine, PricingEngine } from '../engines'
 import ctx from './ctx'
 import { uid } from '../lib/utils'
 import { DesignService } from './design.service'
@@ -79,9 +79,11 @@ export const BudgetService = {
   },
 
   /**
-   * 预算清单·实时视图（智能选型）：直接以 device_selections 为数据源，逐行回溯设备中心富化。
-   * 换档 / 批量选型后选型即变 → 本视图即时刷新（品牌/型号/详细参数/单价随所选型号实时）；
-   * 与已确认的版本快照解耦，「确认生成清单」才固化新版本（概算清单读快照）。
+   * 预算清单·实时视图（智能选型）：以「材料表同源数据」为展示基础 ——
+   *  - 设备行：由 device_selections（当前选型）回溯设备中心富化（品牌/型号/参数/单价随所选型号实时）
+   *  - 定额材料行：材料类推导结果（线缆/管材/辅材/其他材料），价格取定额材料表，缺价按材料均价兜底
+   * 与材料表（BillEngine.generateProject）同源同口径 → 预算清单显示全部系统的全部分组（含纯材料系统）。
+   * 「确认生成清单」才固化新版本（概算清单读快照）。
    */
   liveByProject(projectId: string) {
     const db = repository.db
@@ -100,34 +102,97 @@ export const BudgetService = {
       if (!t) return undefined
       return t.length > max ? `${t.slice(0, max)}…` : t
     }
-    return (db[T.device_selections] ?? [])
-      .map((x) => x as DeviceSelection)
-      .filter((s) => psIds.has(s.project_system_id ?? ''))
-      .map((s) => {
-        const m = s.model_id ? modelOf.get(s.model_id) : undefined
-        const prod = m ? productOf.get(m.product_id) : undefined
-        const bid = m ? brandIdOfModel.get(m.id) : undefined
-        return {
-          selectionId: s.id,
-          projectSystemId: s.project_system_id,
-          quantity: s.quantity,
-          unit_price: s.unit_price,
-          amount: s.total_price,
-          grade: s.grade_code,
-          item: {
-            deviceName: prod?.name,
-            deviceCategory: prod?.category ?? 'other',
-            deviceCode: prod?.device_code,
-            unit: prod?.unit ?? s.unit,
-            item_name: m?.model,
-            // 通用参数 = 设备类型 Product.specification（非富文本）；详细参数 = 型号 detail_html 纯文本
-            spec: prod ? textOf(prod.specification) : undefined,
-            specification: m?.specification,
-            detail: m ? textOf(m.detail_html, 100) : undefined,
-            brandName: bid ? brandNameOf.get(bid) : undefined,
-          },
-        }
+
+    const rows: {
+      projectSystemId?: string
+      selectionId?: string
+      billItemId?: string
+      quantity: number
+      unit_price: number
+      amount: number
+      grade?: string
+      item?: {
+        deviceName?: string
+        deviceCategory?: string
+        unit?: string
+        item_name?: string
+        brandName?: string
+        spec?: string
+        specification?: string
+        detail?: string
+        deviceCode?: string
+        remark?: string
+      }
+    }[] = []
+
+    // ① 设备行：当前选型（与换档/批量选型即时联动）
+    for (const s of (db[T.device_selections] ?? []) as DeviceSelection[]) {
+      if (!psIds.has(s.project_system_id ?? '')) continue
+      const m = s.model_id ? modelOf.get(s.model_id) : undefined
+      const prod = m ? productOf.get(m.product_id) : undefined
+      const bid = m ? brandIdOfModel.get(m.id) : undefined
+      rows.push({
+        selectionId: s.id,
+        projectSystemId: s.project_system_id,
+        quantity: s.quantity,
+        unit_price: s.unit_price,
+        amount: s.total_price,
+        grade: s.grade_code,
+        item: {
+          deviceName: prod?.name,
+          deviceCategory: prod?.category ?? 'other',
+          deviceCode: prod?.device_code,
+          unit: prod?.unit ?? s.unit,
+          item_name: m?.model,
+          // 通用参数 = 设备类型 Product.specification（非富文本）；详细参数 = 型号 detail_html 纯文本
+          spec: prod ? textOf(prod.specification) : undefined,
+          specification: m?.specification,
+          detail: m ? textOf(m.detail_html, 100) : undefined,
+          brandName: bid ? brandNameOf.get(bid) : undefined,
+        },
       })
+    }
+
+    // ② 定额材料行：材料类推导结果（source_type=quota）不带入设备选型，作为材料行展示（与材料表 BillEngine 同源：source_type==='quota'）
+    const quotaZone = (resultType: string): string => {
+      if (resultType === 'conduit' || resultType === 'cable') return 'cable'
+      if (resultType === 'aux') return 'aux'
+      return 'other'
+    }
+    // 材料均价兜底：与 BillEngine.generateProject 一致（按产品类别 cable/aux 材料类）
+    const productCategory = new Map((db[T.products] ?? []).map((p) => [(p as unknown as { id: string }).id, (p as unknown as { category?: string }).category]))
+    const materialModels = (db[T.product_models] ?? []).filter((m) => {
+      const cat = (m as unknown as { product_id: string }).product_id ? productCategory.get((m as unknown as { product_id: string }).product_id) : undefined
+      return cat === 'cable' || cat === 'aux'
+    }) as ProductModel[]
+    const avgPrice = materialModels.length
+      ? materialModels.reduce((s, m) => s + PricingEngine.getPrice(ctx, m.id), 0) / materialModels.length
+      : 0
+    const matByName = new Map((db[T.device_materials] ?? []).filter((x) => (x as { enabled?: boolean }).enabled !== false).map((x) => [(x as unknown as { name: string }).name, x as unknown as { brand?: string; model?: string; params?: string; price?: number; unit?: string }]))
+    for (const r of (db[T.design_results] ?? []) as DesignResult[]) {
+      if (!psIds.has(r.project_system_id) || r.source_type !== 'quota') continue
+      const name = (r.rule_snapshot ?? '').replace('定额-', '') || '材料'
+      const mat = matByName.get(name)
+      const price = mat?.price != null ? mat.price : avgPrice
+      rows.push({
+        projectSystemId: r.project_system_id,
+        quantity: r.quantity,
+        unit_price: price,
+        amount: Math.round(price * r.quantity * 100) / 100,
+        item: {
+          deviceName: name,
+          deviceCategory: quotaZone(r.result_type),
+          unit: mat?.unit ?? r.unit ?? '项',
+          brandName: mat?.brand,
+          item_name: mat?.model,
+          // 通用参数/详细参数：材料品牌/型号/参数规格（明细见 formula_snapshot）
+          specification: [mat?.brand, mat?.model, mat?.params].filter(Boolean).join(' '),
+          detail: r.formula_snapshot,
+          remark: [mat?.brand, mat?.model, mat?.params].filter(Boolean).join(' ') || r.formula_snapshot,
+        },
+      })
+    }
+    return rows
   },
 
   /** 行内手工调整（预算清单数量/单价）：同步 bill_item 与全部关联 budget_item（手工行打标记，重新生成时保留） */

@@ -188,40 +188,46 @@ function PointTable({
     { key: 'quantity', title: '数量', width: 90 },
     { key: 'actions', title: '操作', width: 110 },
   ]
+  // 固定布局：表格总宽 = 全选列 + 各列宽之和（拖动本列不影响其他列，整表向右顺延出滚动条）
+  const CHECK_W = 32
+  const colW = (key: string) => colWidths[key] ?? columns.find((c) => c.key === key)?.width ?? 120
+  const totalW = CHECK_W + columns.reduce((s, c) => s + colW(c.key), 0)
+  const applyWidth = (key: string, w: number) => {
+    setColWidths((prev) => {
+      const next = { ...prev, [key]: w }
+      localStorage.setItem('points-table:w', JSON.stringify(next))
+      return next
+    })
+  }
   const startResize = (e: React.PointerEvent, key: string) => {
     e.preventDefault()
-    const th = (e.currentTarget as HTMLElement).parentElement as HTMLElement | null
-    if (!th) return
     const startX = e.clientX
-    const startW = th.getBoundingClientRect().width
-    const move = (ev: PointerEvent) => {
-      th.style.width = `${Math.max(60, startW + ev.clientX - startX)}px`
-      setColWidths((prev) => {
-        const next = { ...prev, [key]: Math.max(60, startW + ev.clientX - startX) }
-        localStorage.setItem('points-table:w', JSON.stringify(next))
-        return next
-      })
+    const startW = colW(key)
+    const onMove = (ev: PointerEvent) => applyWidth(key, Math.max(60, Math.min(560, startW + ev.clientX - startX)))
+    const onUp = () => {
+      document.removeEventListener('pointermove', onMove)
+      document.removeEventListener('pointerup', onUp)
     }
-    const up = () => {
-      document.removeEventListener('pointermove', move)
-      document.removeEventListener('pointerup', up)
-    }
-    document.addEventListener('pointermove', move)
-    document.addEventListener('pointerup', up)
+    document.addEventListener('pointermove', onMove)
+    document.addEventListener('pointerup', onUp)
   }
   const allIds = rows.map((p) => p.id)
   const allSel = allIds.length > 0 && allIds.every((id) => selected.has(id))
 
   return (
     <div className="overflow-auto">
-      <table className="w-full border-collapse text-[12.5px]">
+      <table className="border-collapse text-[12.5px]" style={{ tableLayout: 'fixed', width: totalW }}>
+        <colgroup>
+          <col style={{ width: CHECK_W }} />
+          {columns.map((c) => <col key={c.key} style={{ width: colW(c.key) }} />)}
+        </colgroup>
         <thead>
           <tr className="bg-surface-subtle text-left text-[11px] text-muted">
             <th className="w-8 px-2 py-1.5">
               <input type="checkbox" className="accent-accent" checked={allSel} onChange={() => onSelectAll(allIds)} aria-label="全选" />
             </th>
             {columns.map((c) => (
-              <th key={c.key} className="relative px-2.5 py-1.5 font-medium" style={{ minWidth: c.width, width: colWidths[c.key] }}>
+              <th key={c.key} className="relative px-2.5 py-1.5 font-medium overflow-hidden text-ellipsis whitespace-nowrap">
                 {c.title}
                 <span className="absolute inset-y-0 -right-0.5 z-10 w-1.5 cursor-col-resize hover:bg-accent/40" onPointerDown={(e) => startResize(e, c.key)} title="拖动调整列宽" />
               </th>
@@ -238,9 +244,9 @@ function PointTable({
               <td className="px-2 py-1.5">
                 <input type="checkbox" className="accent-accent" checked={selected.has(p.id)} onChange={() => onToggle(p.id)} aria-label="选择行" />
               </td>
-              <td className="px-2.5 py-1.5"><span className="select-none text-faint">⋮⋮ </span>{p.buildingName ?? <span className="text-faint">—</span>}</td>
-              <td className="px-2.5 py-1.5 text-muted">{p.telecomRoomName ?? '—'}</td>
-              <td className="px-2.5 py-1.5 font-medium">{p.deviceName ?? '—'}</td>
+              <td className="px-2.5 py-1.5 overflow-hidden text-ellipsis whitespace-nowrap"><span className="select-none text-faint">⋮⋮ </span>{p.buildingName ?? <span className="text-faint">—</span>}</td>
+              <td className="px-2.5 py-1.5 text-muted overflow-hidden text-ellipsis whitespace-nowrap">{p.telecomRoomName ?? '—'}</td>
+              <td className="px-2.5 py-1.5 font-medium overflow-hidden text-ellipsis whitespace-nowrap">{p.deviceName ?? '—'}</td>
               <td className="px-2.5 py-1.5 text-right font-mono">{fmtNum(p.quantity)}</td>
               <td className="px-2.5 py-1.5">
                 <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
